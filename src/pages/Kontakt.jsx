@@ -72,7 +72,13 @@ export default function Kontakt() {
                 icon={<Linkedin size={16} />}
                 label="LinkedIn"
                 value={
-                  <a href="#" className="bn-link" style={{ color: COL.ink }}>
+                  <a
+                    href="https://www.linkedin.com/company/bolignorge/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bn-link"
+                    style={{ color: COL.ink }}
+                  >
                     bolignorge
                   </a>
                 }
