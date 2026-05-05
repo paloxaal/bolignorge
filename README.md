@@ -1,58 +1,92 @@
-# Bolig Norge
+# Bolig Norge — Web
 
-Ny offentlig nettside for Bolig Norge AS. Bygd med Vite + React + Tailwind.
+Offentlig nettside og styreportal for Bolig Norge AS.
 
-## Kom i gang
+Vite + React + Tailwind. Supabase håndterer autentisering, database og fillagring.
+
+## Komme i gang
 
 ```bash
 npm install
+cp .env.example .env.local      # fyll inn Supabase-nøkler
 npm run dev
 ```
 
-Åpner automatisk på http://localhost:5173
+App-en kjører på `http://localhost:5173`.
 
-## Bygg for produksjon
-
-```bash
-npm run build
-npm run preview
-```
-
-`dist/`-mappen kan deployes til hvilken som helst static host.
+For lansering, se **[DEPLOY.md](./DEPLOY.md)**.
 
 ## Struktur
 
-- `src/App.jsx` — hele nettsiden (én fil, ~2660 linjer)
-- `src/main.jsx` — React entry point
-- `src/index.css` — Tailwind + globale stiler
-- `public/favicon.svg` — favicon
-- `index.html` — HTML shell med meta-tagger
+```
+src/
+├── App.jsx                  # routes, nav, footer
+├── data.js                  # statisk innhold: prosjekter, aktuelt, palette
+├── components/
+│   ├── BNLogo.jsx
+│   ├── HeroMotif.jsx        # animert isometric forside-hero
+│   └── ProtectedRoute.jsx   # rute-vakt for /admin og /styreportal
+├── contexts/
+│   └── AuthContext.jsx      # Supabase auth state og rolle-håndtering
+├── lib/
+│   └── supabase.js          # Supabase-klient
+├── pages/
+│   ├── Home.jsx
+│   ├── Projects.jsx
+│   ├── ProjectDetail.jsx
+│   ├── OmOss.jsx
+│   ├── Aktuelt.jsx
+│   ├── EiendomSokes.jsx
+│   ├── Kontakt.jsx
+│   ├── Samfunnsansvar.jsx
+│   ├── Login.jsx            # /logg-inn
+│   ├── Admin.jsx            # /admin (kun admin-rolle)
+│   ├── Styreportal.jsx      # /styreportal (admin + board)
+│   └── NotFound.jsx
+public/
+├── images/
+│   ├── projects/            # prosjektbilder
+│   ├── team/                # styre + ledelse
+│   └── landscape-fjord.jpg  # Kontakt-side
+├── Aapenhetsloven.pdf       # PDF lenket fra Samfunnsansvar
+└── logo-bolig-norge.svg
+supabase/
+├── schema.sql               # databasestruktur, RLS policies, triggers
+└── seed.sql                 # eksempelrapporter (kun for testing)
+```
 
-## Rediger innhold
+## Innholdshåndtering før CMS
 
-Alt innhold ligger i datastrukturer øverst i `src/App.jsx`:
+Inntil admin-grensesnittet er fullt utbygd, redigeres innhold direkte i kode:
 
-- `PROJECTS` — aktive prosjekter (linje ~25)
-- `COMPLETED` — ferdigstilte prosjekter
-- `PARTNERS` — partnerlisten
-- `NEWS` — aktuelt-saker
-- `TICKER` — toppbar-status
-- `PRESS` — presseomtaler
+| Hva | Hvor |
+|-----|------|
+| Aktive prosjekter | `src/data.js` (PROJECTS-array) |
+| Ferdigstilte prosjekter | `src/data.js` (COMPLETED-array) |
+| Aktuelt-saker | `src/data.js` (NEWS-array) |
+| Team og styre | `src/data.js` (TEAM-array) |
+| Tekst på Om oss / Samfunnsansvar | `src/pages/OmOss.jsx`, `src/pages/Samfunnsansvar.jsx` |
 
-## Deploy til Vercel
+Etter endring: commit og push til GitHub — Vercel deployer automatisk.
 
-1. Push til GitHub
-2. Importer repoet i [vercel.com](https://vercel.com)
-3. Deploy — det er det. Ingen konfig nødvendig.
-4. Legg til `bolignorge.no` som custom domain når klar
+## Roller
 
-## Erstatt bolignorge.no
+To roller i `profiles.role`:
 
-Når Vercel-deploy er klar:
+- **`admin`** — full tilgang, ser `/admin`-dashboard, kan laste opp rapporter
+- **`board`** — styremedlem, ser `/styreportal` med rapportoversikt
 
-1. Vercel → Project → Settings → Domains → legg til `bolignorge.no` og `www.bolignorge.no`
-2. I ProISP DNS:
-   - A-record `@` → `76.76.21.21`
-   - CNAME `www` → `cname.vercel-dns.com`
-3. MX-records (e-post) **rør ikke** — `post@bolignorge.no` virker fortsatt
-4. Vent 5-30 min på DNS-propagering
+Se `supabase/schema.sql` for detaljerte RLS policies.
+
+## Stack
+
+- **React 18** + **React Router 6**
+- **Vite 5** for utvikling og bygg
+- **Tailwind CSS 3** for styling
+- **Supabase** (PostgreSQL + Auth + Storage)
+- **Lucide React** for ikoner
+- **Fraunces** (display) + **Manrope** (body) + **JetBrains Mono** (technical) — fonter via Google Fonts
+
+## Lisens
+
+Proprietær. © Bolig Norge AS.
