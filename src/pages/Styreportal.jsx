@@ -645,7 +645,11 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           )}
           {page === "pipeline" && (
             <PipelinePage data={data} onView={setViewingCase} />
-          )}        </div>
+          )}
+          {page === "financials" && (
+            <FinancialsPage data={data} totals={totals} />
+          )}
+        </div>
 
         {/* Footer disclaimer */}
         <footer
@@ -1434,7 +1438,21 @@ function PortfolioPage({ data, onView }) {
                     fontSize: 13,
                   }}
                 >
-                  {p.units > 0 ? p.units : "—"}
+                  {p.units > 0 ? (
+                    <>
+                      <div>{p.units}</div>
+                      {(p.unitsSold ?? 0) > 0 && (
+                        <div
+                          className="text-[10px] mt-0.5"
+                          style={{ color: COL.gold }}
+                        >
+                          Solgt {p.unitsSold} ({Math.round((p.unitsSold / p.units) * 100)} %)
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="px-4 py-3.5">
                   <StatusPill cat={p.statusCategory} text={p.statusShort} />
@@ -2084,7 +2102,7 @@ function CaseViewer({ caseData, onClose }) {
 }
 
 // ---------------- FINANCIALS (read-only) ----------------
-function FinancialsPage({ data }) {
+function FinancialsPage({ data, totals }) {
   const financials = data.financials || [];
   const rows = useMemo(() => {
     let accRes = 0;
@@ -2130,6 +2148,7 @@ function FinancialsPage({ data }) {
 
   return (
     <div className="space-y-10">
+      {/* KPI-kort */}
       <div className="grid grid-cols-4 gap-px" style={{ background: COL.border }}>
         <KPICard
           label={`Årsresultat ${lastConfirmed?.year}`}
@@ -2149,6 +2168,9 @@ function FinancialsPage({ data }) {
           value={fmtPct(lastConfirmed?.utdGrad)}
         />
       </div>
+
+      {/* NAV — Verdijustert egenkapital */}
+      {totals && <NAVCard totals={totals} />}
 
       <section
         className="border p-8"
@@ -2251,6 +2273,7 @@ function FinancialsPage({ data }) {
                 "Utbytte",
                 "Fra år",
                 "Bokført EK",
+                "Gjeld",
                 "Akk. resultat",
                 "Akk. utbytte",
                 "Utd.grad",
@@ -2292,6 +2315,7 @@ function FinancialsPage({ data }) {
                 <ReadCell value={r.dividend} />
                 <ReadCell value={r.dividendFromYear} muted />
                 <ReadCell value={r.ek} />
+                <ReadCell value={r.gjeld ?? 0} muted />
                 <ReadCell value={r.accResult} muted />
                 <ReadCell value={r.accDividend} muted />
                 <td
@@ -2350,6 +2374,14 @@ export default function Styreportal() {
           ...FALLBACK_SEED,
           ...loaded,
           pipeline: loaded.pipeline ?? FALLBACK_SEED.pipeline,
+          projects: (loaded.projects || FALLBACK_SEED.projects || []).map((p) => ({
+            unitsSold: 0,
+            ...p,
+          })),
+          financials: (loaded.financials || FALLBACK_SEED.financials || []).map((f) => ({
+            gjeld: 0,
+            ...f,
+          })),
         });
       } else {
         setData(FALLBACK_SEED);

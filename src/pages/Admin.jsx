@@ -497,7 +497,12 @@ function AdminDashboard() {
               byggeslutt: null,
               tomtekost: 0,
               merverdiTomt: 0,
+              unitsSold: 0,
               ...p,
+            })),
+            financials: (loaded.financials || SEED.financials || []).map((f) => ({
+              gjeld: 0,
+              ...f,
             })),
           };
           setData(migrated);
@@ -704,7 +709,11 @@ function AdminDashboard() {
           )}
           {page === "pipeline" && (
             <PipelinePage data={data} setData={setData} />
-          )}          {page === "report" && (
+          )}
+          {page === "financials" && (
+            <FinancialsPage data={data} setData={setData} totals={totals} />
+          )}
+          {page === "report" && (
             <ReportPage data={data} totals={totals} />
           )}
         </div>
@@ -2262,7 +2271,21 @@ function PortfolioPage({ data, onEdit, onAdd }) {
                   className="px-4 py-3.5 text-right"
                   style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }}
                 >
-                  {p.units > 0 ? p.units : "—"}
+                  {p.units > 0 ? (
+                    <>
+                      <div>{p.units}</div>
+                      {(p.unitsSold ?? 0) > 0 && (
+                        <div
+                          className="text-[10px] mt-0.5"
+                          style={{ color: COL.gold }}
+                        >
+                          Solgt {p.unitsSold} ({Math.round((p.unitsSold / p.units) * 100)} %)
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="px-4 py-3.5">
                   <StatusPill cat={p.statusCategory} text={p.statusShort} />
@@ -2445,7 +2468,7 @@ function ProjectEditModal({ project, onSave, onDelete, onClose }) {
           </div>
 
           <div className="grid grid-cols-3 gap-4">
-            <Field label="Antall boliger">
+            <Field label="Antall boliger (totalt)">
               <Input
                 type="number"
                 value={draft.units}
@@ -2464,6 +2487,35 @@ function ProjectEditModal({ project, onSave, onDelete, onClose }) {
                 type="number"
                 value={draft.db}
                 onChange={(v) => update("db", Number(v))}
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <Field label="Solgt (antall)">
+              <Input
+                type="number"
+                value={draft.unitsSold ?? 0}
+                onChange={(v) => update("unitsSold", Number(v))}
+              />
+            </Field>
+            <Field label="Ledig (beregnet)">
+              <Input
+                type="number"
+                value={Math.max(0, (Number(draft.units) || 0) - (Number(draft.unitsSold) || 0))}
+                disabled
+                onChange={() => {}}
+              />
+            </Field>
+            <Field label="Salgsgrad">
+              <Input
+                value={
+                  (Number(draft.units) || 0) > 0
+                    ? `${Math.round(((Number(draft.unitsSold) || 0) / Number(draft.units)) * 100)} %`
+                    : "—"
+                }
+                disabled
+                onChange={() => {}}
               />
             </Field>
           </div>
@@ -2712,7 +2764,7 @@ function Select({ value, onChange, options }) {
 }
 
 // ---------------- FINANCIALS PAGE ----------------
-function FinancialsPage({ data, setData }) {
+function FinancialsPage({ data, setData, totals }) {
   const financials = data.financials || [];
 
   const updateRow = (year, patch) => {
@@ -2731,7 +2783,7 @@ function FinancialsPage({ data, setData }) {
       ...d,
       financials: [
         ...(d.financials || []),
-        { year: max + 1, result: null, dividend: 0, ek: null, projected: true },
+        { year: max + 1, result: null, dividend: 0, ek: null, gjeld: 0, projected: true },
       ],
     }));
   };
@@ -2805,6 +2857,9 @@ function FinancialsPage({ data, setData }) {
           value={fmtPct(lastConfirmed?.utdGrad)}
         />
       </div>
+
+      {/* NAV — Verdijustert egenkapital */}
+      {totals && <NAVCard totals={totals} />}
 
       {/* Combined chart */}
       <section
@@ -2915,6 +2970,7 @@ function FinancialsPage({ data, setData }) {
                 "Utbytte",
                 "Fra år",
                 "Bokført EK",
+                "Gjeld",
                 "Akk. resultat",
                 "Akk. utbytte",
                 "Utd.grad",
@@ -2974,6 +3030,12 @@ function FinancialsPage({ data, setData }) {
                   <NumCell
                     value={r.ek}
                     onChange={(v) => updateRow(r.year, { ek: v })}
+                  />
+                </td>
+                <td className="px-4 py-2">
+                  <NumCell
+                    value={r.gjeld ?? 0}
+                    onChange={(v) => updateRow(r.year, { gjeld: v })}
                   />
                 </td>
                 <td
