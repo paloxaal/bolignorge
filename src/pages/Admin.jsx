@@ -63,6 +63,8 @@ const SEED = {
   market: {
     outlook:
       "Det er høy aktivitet ved inngangen til året, med overlevering av 126 leiligheter på Steinan. De siste leilighetene overleveres neste uke. Samtidig er det byggestart på 130 nye leiligheter, hvor 70 % allerede er solgt. I tillegg er det byggestart på Linåskollen i Ski, med 50 leiligheter, hvor 26 allerede er solgt. Veidekke, som totalentreprenør, garanterer dessuten for salg opp til 60 %.\n\nPlanprosessene går ellers i tråd med planene for både Hamang og Sølfast. Det forberedes også for salg i prosjekter som Sjøkanten i Steinkjer og Sundsøya på Inderøy.\n\nVi vurderer fortløpende nye case, men det meste er foreløpig ikke regningssvarende. Vi deltar nå i én konkret prosess knyttet til kjøp av en større boligtomt i Trondheim, NRK Tyholt, som regnes som en av de mest attraktive tomtene i markedet.",
+    imageUrl: "",
+    imageCaption: "",
   },
   projects: [
     {
@@ -377,51 +379,43 @@ const SEED = {
   ],
 };
 
-// Storage shim mot Supabase singleton-rad (public.dashboard_state, id='main').
-// LockManager-deadlock håndteres på klient-init i src/lib/supabase.js (noOpLock),
-// så vi trenger ikke wrappe getSession/getUser her — kun en kort timeout som
-// safety net mot nettverkshenging.
-const TIMEOUT_MS = 5000;
-const withTimeout = (p, label) =>
-  Promise.race([
-    p,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout ${label} (${TIMEOUT_MS}ms)`)), TIMEOUT_MS)
-    ),
-  ]);
-
+const STORAGE_KEY = "bn_dashboard_v1";
 const storage = {
   get: async () => {
     try {
-      const { data, error } = await withTimeout(
-        supabase
-          .from("dashboard_state")
-          .select("data")
-          .eq("id", "main")
-          .maybeSingle(),
-        "load"
+      // Refresh sesjonen for å unngå at gammel token henger
+      await supabase.auth.getSession();
+      const queryPromise = supabase
+        .from("dashboard_state")
+        .select("data")
+        .eq("id", "main")
+        .maybeSingle();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout (10s)")), 10000)
       );
+      const result = await Promise.race([queryPromise, timeoutPromise]);
+      const { data, error } = result;
       if (error) {
         console.error("[dashboard] load error:", error.message);
         return null;
       }
       if (!data) return null;
-      return data.data;
+      return { value: JSON.stringify(data.data) };
     } catch (e) {
       console.error("[dashboard] load failed:", e.message);
       return null;
     }
   },
-  set: async (value, userId) => {
+  set: async (_key, value) => {
     try {
-      const { error } = await withTimeout(
-        supabase.from("dashboard_state").upsert({
+      const { data: userData } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from("dashboard_state")
+        .upsert({
           id: "main",
-          data: value,
-          updated_by: userId ?? null,
-        }),
-        "save"
-      );
+          data: JSON.parse(value),
+          updated_by: userData?.user?.id ?? null,
+        });
       if (error) {
         console.error("[dashboard] save error:", error.message);
         return false;
@@ -486,8 +480,9 @@ function AdminDashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const loaded = await storage.get();
-        if (loaded) {
+        const r = await storage.get(STORAGE_KEY);
+        if (r && r.value) {
+          const loaded = JSON.parse(r.value);
           // Migrate: ensure new fields exist on legacy data
           const migrated = {
             ...SEED,
@@ -520,7 +515,7 @@ function AdminDashboard() {
     setSaveStatus("saving");
     const t = setTimeout(async () => {
       try {
-        await storage.set(data, profile?.id);
+        await storage.set(STORAGE_KEY, JSON.stringify(data));
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 1500);
       } catch {
@@ -528,7 +523,7 @@ function AdminDashboard() {
       }
     }, 400);
     return () => clearTimeout(t);
-  }, [data, loading, profile?.id]);
+  }, [data, loading]);
 
   if (loading || !data) {
     return (
@@ -844,6 +839,10 @@ function SaveIndicator({ status }) {
 function DashboardPage({ data, setData, totals }) {
   const [editingMarket, setEditingMarket] = useState(false);
   const [marketDraft, setMarketDraft] = useState(data.market.outlook);
+  const [imageUrlDraft, setImageUrlDraft] = useState(data.market.imageUrl || "");
+  const [imageCaptionDraft, setImageCaptionDraft] = useState(
+    data.market.imageCaption || ""
+  );
 
   const chartData = data.projects
     .filter((p) => p.omsetning > 0)
@@ -854,44 +853,29 @@ function DashboardPage({ data, setData, totals }) {
     }))
     .sort((a, b) => b.Omsetning - a.Omsetning);
 
+  const startEdit = () => {
+    setMarketDraft(data.market.outlook);
+    setImageUrlDraft(data.market.imageUrl || "");
+    setImageCaptionDraft(data.market.imageCaption || "");
+    setEditingMarket(true);
+  };
+
+  const saveMarket = () => {
+    setData((d) => ({
+      ...d,
+      market: {
+        ...d.market,
+        outlook: marketDraft,
+        imageUrl: imageUrlDraft,
+        imageCaption: imageCaptionDraft,
+      },
+    }));
+    setEditingMarket(false);
+  };
+
   return (
     <div className="space-y-10">
-      {/* KPI Row */}
-      <div className="grid grid-cols-4 gap-px" style={{ background: COL.border }}>
-        <KPICard
-          label="Total porteføljeverdi"
-          value={fmtMrd(totals.omsetning)}
-          sub={`Justert for eierandeler: ${fmtMrd(totals.omsetningJustert)}`}
-          accent
-        />
-        <KPICard
-          label="Dekningsbidrag"
-          value={fmtMrd(totals.db)}
-          sub={`Justert for eierandeler: ${fmtMrd(totals.dbJustert)}`}
-        />
-        <KPICard
-          label="DB-margin"
-          value={fmtPct(totals.margin)}
-          sub="Justert for eierandeler"
-        />
-        <KPICard
-          label="Boliger under utvikling"
-          value={fmtNOK(totals.units) + "+"}
-          sub="Total prosjektscope"
-        />
-      </div>
-
-      {/* Verdijustert egenkapital */}
-      <section>
-        <NAVCard totals={totals} />
-      </section>
-
-      {/* Selskapets kapital — nøkkeltall fra Selskapstall-fanen */}
-      <section>
-        <CapitalSummary financials={data.financials || []} />
-      </section>
-
-      {/* Market & Outlook */}
+      {/* §01 — Marked & outlook + Eiendom Norge prisstatistikk */}
       <section
         className="border p-8"
         style={{ borderColor: COL.border, background: COL.card }}
@@ -917,10 +901,7 @@ function DashboardPage({ data, setData, totals }) {
           </div>
           {!editingMarket ? (
             <button
-              onClick={() => {
-                setMarketDraft(data.market.outlook);
-                setEditingMarket(true);
-              }}
+              onClick={startEdit}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs border"
               style={{ borderColor: COL.border, color: COL.inkSoft }}
             >
@@ -937,13 +918,7 @@ function DashboardPage({ data, setData, totals }) {
                 Avbryt
               </button>
               <button
-                onClick={() => {
-                  setData((d) => ({
-                    ...d,
-                    market: { ...d.market, outlook: marketDraft },
-                  }));
-                  setEditingMarket(false);
-                }}
+                onClick={saveMarket}
                 className="px-3 py-1.5 text-xs"
                 style={{ background: COL.ink, color: COL.paper }}
               >
@@ -952,34 +927,112 @@ function DashboardPage({ data, setData, totals }) {
             </div>
           )}
         </div>
+
         {!editingMarket ? (
-          <div
-            className="text-[15px] leading-[1.7] whitespace-pre-line"
-            style={{ color: COL.inkSoft, maxWidth: "65ch" }}
-          >
-            {data.market.outlook}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+            <div
+              className="md:col-span-3 text-[15px] leading-[1.7] whitespace-pre-line"
+              style={{ color: COL.inkSoft }}
+            >
+              {data.market.outlook}
+            </div>
+            {data.market.imageUrl ? (
+              <div className="md:col-span-2">
+                <img
+                  src={data.market.imageUrl}
+                  alt={data.market.imageCaption || "Markedsstatistikk"}
+                  className="w-full h-auto"
+                  style={{ border: `1px solid ${COL.border}` }}
+                />
+                {data.market.imageCaption && (
+                  <div
+                    className="mt-2 text-[11px]"
+                    style={{
+                      color: COL.muted,
+                      fontFamily: "'JetBrains Mono', monospace",
+                    }}
+                  >
+                    {data.market.imageCaption}
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         ) : (
-          <textarea
-            value={marketDraft}
-            onChange={(e) => setMarketDraft(e.target.value)}
-            rows={12}
-            className="w-full p-4 text-[15px] leading-[1.7] border resize-y"
-            style={{
-              background: COL.paper,
-              borderColor: COL.border,
-              color: COL.inkSoft,
-            }}
-          />
+          <div className="space-y-4">
+            <div>
+              <label
+                className="block text-[10px] tracking-[0.2em] uppercase mb-2"
+                style={{ color: COL.muted }}
+              >
+                Outlook-tekst
+              </label>
+              <textarea
+                value={marketDraft}
+                onChange={(e) => setMarketDraft(e.target.value)}
+                rows={12}
+                className="w-full p-4 text-[15px] leading-[1.7] border resize-y"
+                style={{
+                  background: COL.paper,
+                  borderColor: COL.border,
+                  color: COL.inkSoft,
+                }}
+              />
+            </div>
+            <div>
+              <label
+                className="block text-[10px] tracking-[0.2em] uppercase mb-2"
+                style={{ color: COL.muted }}
+              >
+                Bilde-URL (Eiendom Norge prisstatistikk)
+              </label>
+              <input
+                type="text"
+                value={imageUrlDraft}
+                onChange={(e) => setImageUrlDraft(e.target.value)}
+                placeholder="https://… eller data:image/png;base64,…"
+                className="w-full p-3 text-[14px] border"
+                style={{
+                  background: COL.paper,
+                  borderColor: COL.border,
+                  color: COL.inkSoft,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              />
+              <div
+                className="text-[11px] mt-1"
+                style={{ color: COL.muted }}
+              >
+                Lim inn URL til bilde, eller en data-URI for å embedde direkte. La stå tom for å skjule bildet.
+              </div>
+            </div>
+            <div>
+              <label
+                className="block text-[10px] tracking-[0.2em] uppercase mb-2"
+                style={{ color: COL.muted }}
+              >
+                Bildetekst (valgfritt)
+              </label>
+              <input
+                type="text"
+                value={imageCaptionDraft}
+                onChange={(e) => setImageCaptionDraft(e.target.value)}
+                placeholder="Kilde: Eiendom Norge, mars 2026"
+                className="w-full p-3 text-[14px] border"
+                style={{
+                  background: COL.paper,
+                  borderColor: COL.border,
+                  color: COL.inkSoft,
+                }}
+              />
+            </div>
+          </div>
         )}
       </section>
 
-      {/* Revenue chart */}
-      <section
-        className="border p-8"
-        style={{ borderColor: COL.border, background: COL.card }}
-      >
-        <div className="mb-6">
+      {/* §02 — Prosjektstatus: KPI-kort + omsetning/DB chart */}
+      <section className="space-y-6">
+        <div>
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-1"
             style={{ color: COL.muted }}
@@ -994,49 +1047,113 @@ function DashboardPage({ data, setData, totals }) {
               letterSpacing: "-0.01em",
             }}
           >
-            Omsetning & dekningsbidrag per prosjekt
+            Prosjektstatus
           </h2>
-          <div className="text-xs mt-1" style={{ color: COL.muted }}>
-            Beløp i mNOK
-          </div>
         </div>
-        <ResponsiveContainer width="100%" height={Math.max(280, chartData.length * 42)}>
-          <BarChart
-            data={chartData}
-            layout="vertical"
-            margin={{ top: 10, right: 30, left: 110, bottom: 10 }}
-          >
-            <CartesianGrid stroke={COL.borderSoft} horizontal={false} />
-            <XAxis
-              type="number"
-              stroke={COL.muted}
-              fontSize={11}
-              tickFormatter={(v) => v.toLocaleString("nb-NO")}
-            />
-            <YAxis
-              dataKey="name"
-              type="category"
-              stroke={COL.inkSoft}
-              fontSize={12}
-              width={100}
-            />
-            <Tooltip
-              contentStyle={{
-                background: COL.paper,
-                border: `1px solid ${COL.border}`,
-                fontSize: 12,
-                fontFamily: "'JetBrains Mono', monospace",
+        <div className="grid grid-cols-4 gap-px" style={{ background: COL.border }}>
+          <KPICard
+            label="Total porteføljeverdi"
+            value={fmtMrd(totals.omsetning)}
+            sub={`Justert for eierandeler: ${fmtMrd(totals.omsetningJustert)}`}
+            accent
+          />
+          <KPICard
+            label="Dekningsbidrag"
+            value={fmtMrd(totals.db)}
+            sub={`Justert for eierandeler: ${fmtMrd(totals.dbJustert)}`}
+          />
+          <KPICard
+            label="DB-margin"
+            value={fmtPct(totals.margin)}
+            sub="Justert for eierandeler"
+          />
+          <KPICard
+            label="Boliger under utvikling"
+            value={fmtNOK(totals.units) + "+"}
+            sub="Total prosjektscope"
+          />
+        </div>
+        <div
+          className="border p-8"
+          style={{ borderColor: COL.border, background: COL.card }}
+        >
+          <div className="mb-6">
+            <h3
+              className="text-lg"
+              style={{
+                fontFamily: "'Fraunces', serif",
+                fontWeight: 500,
+                letterSpacing: "-0.01em",
               }}
-              formatter={(v) => v.toLocaleString("nb-NO") + " mNOK"}
-            />
-            <Legend
-              wrapperStyle={{ fontSize: 11, paddingTop: 10 }}
-              iconType="square"
-            />
-            <Bar dataKey="Omsetning" fill={COL.ink} radius={[0, 2, 2, 0]} />
-            <Bar dataKey="DB" fill={COL.gold} radius={[0, 2, 2, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+            >
+              Omsetning & dekningsbidrag per prosjekt
+            </h3>
+            <div className="text-xs mt-1" style={{ color: COL.muted }}>
+              Beløp i mNOK
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={Math.max(280, chartData.length * 42)}>
+            <BarChart
+              data={chartData}
+              layout="vertical"
+              margin={{ top: 10, right: 30, left: 110, bottom: 10 }}
+            >
+              <CartesianGrid stroke={COL.borderSoft} horizontal={false} />
+              <XAxis
+                type="number"
+                stroke={COL.muted}
+                fontSize={11}
+                tickFormatter={(v) => v.toLocaleString("nb-NO")}
+              />
+              <YAxis
+                dataKey="name"
+                type="category"
+                stroke={COL.inkSoft}
+                fontSize={12}
+                width={100}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: COL.paper,
+                  border: `1px solid ${COL.border}`,
+                  fontSize: 12,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+                formatter={(v) => v.toLocaleString("nb-NO") + " mNOK"}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: 11, paddingTop: 10 }}
+                iconType="square"
+              />
+              <Bar dataKey="Omsetning" fill={COL.ink} radius={[0, 2, 2, 0]} />
+              <Bar dataKey="DB" fill={COL.gold} radius={[0, 2, 2, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+
+      {/* §03 — Selskapstall: NAV + EK-binding chart */}
+      <section className="space-y-6">
+        <div>
+          <div
+            className="text-[10px] tracking-[0.2em] uppercase mb-1"
+            style={{ color: COL.muted }}
+          >
+            §03
+          </div>
+          <h2
+            className="text-2xl"
+            style={{
+              fontFamily: "'Fraunces', serif",
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Selskapstall
+          </h2>
+        </div>
+        <NAVCard totals={totals} />
+        <CapitalSummary financials={data.financials || []} />
       </section>
     </div>
   );

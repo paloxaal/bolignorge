@@ -45,38 +45,54 @@ const COL = {
   muted: "#6B6452",
 };
 
-// Storage shim mot Supabase singleton-rad (public.dashboard_state, id='main').
-// Styreportalen er read-only; admin skriver, board leser via RLS-policy.
-// LockManager-deadlock håndteres på klient-init i src/lib/supabase.js (noOpLock).
-const TIMEOUT_MS = 5000;
-const withTimeout = (p, label) =>
-  Promise.race([
-    p,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout ${label} (${TIMEOUT_MS}ms)`)), TIMEOUT_MS)
-    ),
-  ]);
-
+// Storage key — same as admin dashboard so board portal mirrors live data
+// In production this would be a shared backend (e.g. Supabase) with role-based access:
+// admin writes, board reads via "published" snapshot
+const STORAGE_KEY = "bn_dashboard_v1";
 const storage = {
   get: async () => {
     try {
-      const { data, error } = await withTimeout(
-        supabase
-          .from("dashboard_state")
-          .select("data")
-          .eq("id", "main")
-          .maybeSingle(),
-        "load"
+      // Refresh sesjonen for å unngå at gammel token henger
+      await supabase.auth.getSession();
+      const queryPromise = supabase
+        .from("dashboard_state")
+        .select("data")
+        .eq("id", "main")
+        .maybeSingle();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout (10s)")), 10000)
       );
+      const result = await Promise.race([queryPromise, timeoutPromise]);
+      const { data, error } = result;
       if (error) {
         console.error("[dashboard] load error:", error.message);
         return null;
       }
       if (!data) return null;
-      return data.data;
+      return { value: JSON.stringify(data.data) };
     } catch (e) {
       console.error("[dashboard] load failed:", e.message);
       return null;
+    }
+  },
+  set: async (_key, value) => {
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from("dashboard_state")
+        .upsert({
+          id: "main",
+          data: JSON.parse(value),
+          updated_by: userData?.user?.id ?? null,
+        });
+      if (error) {
+        console.error("[dashboard] save error:", error.message);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error("[dashboard] save failed:", e.message);
+      return false;
     }
   },
 };
@@ -93,6 +109,8 @@ const FALLBACK_SEED = {
   market: {
     outlook:
       "Det er høy aktivitet ved inngangen til året, med overlevering av 126 leiligheter på Steinan. De siste leilighetene overleveres neste uke. Samtidig er det byggestart på 130 nye leiligheter, hvor 70 % allerede er solgt. I tillegg er det byggestart på Linåskollen i Ski, med 50 leiligheter, hvor 26 allerede er solgt. Veidekke, som totalentreprenør, garanterer dessuten for salg opp til 60 %.\n\nPlanprosessene går ellers i tråd med planene for både Hamang og Sølfast. Det forberedes også for salg i prosjekter som Sjøkanten i Steinkjer og Sundsøya på Inderøy.\n\nVi vurderer fortløpende nye case, men det meste er foreløpig ikke regningssvarende. Vi deltar nå i én konkret prosess knyttet til kjøp av en større boligtomt i Trondheim, NRK Tyholt, som regnes som en av de mest attraktive tomtene i markedet.",
+    imageUrl: "",
+    imageCaption: "",
   },
   projects: [
     {
@@ -441,8 +459,9 @@ function StyreportalCore() {
 
   const loadData = async () => {
     try {
-      const loaded = await storage.get();
-      if (loaded) {
+      const r = await storage.get(STORAGE_KEY);
+      if (r && r.value) {
+        const loaded = JSON.parse(r.value);
         setData({
           ...FALLBACK_SEED,
           ...loaded,
@@ -754,41 +773,7 @@ function DashboardPage({ data, totals }) {
 
   return (
     <div className="space-y-10">
-      <div className="grid grid-cols-4 gap-px" style={{ background: COL.border }}>
-        <KPICard
-          label="Total porteføljeverdi"
-          value={fmtMrd(totals.omsetning)}
-          sub={`Justert for eierandeler: ${fmtMrd(totals.omsetningJustert)}`}
-          accent
-        />
-        <KPICard
-          label="Dekningsbidrag"
-          value={fmtMrd(totals.db)}
-          sub={`Justert for eierandeler: ${fmtMrd(totals.dbJustert)}`}
-        />
-        <KPICard
-          label="DB-margin"
-          value={fmtPct(totals.margin)}
-          sub="Justert for eierandeler"
-        />
-        <KPICard
-          label="Boliger under utvikling"
-          value={fmtNOK(totals.units) + "+"}
-          sub="Total prosjektscope"
-        />
-      </div>
-
-      {/* Verdijustert egenkapital */}
-      <section>
-        <NAVCard totals={totals} />
-      </section>
-
-      {/* Selskapets kapital */}
-      <section>
-        <CapitalSummary financials={data.financials || []} />
-      </section>
-
-      {/* Marked & outlook */}
+      {/* §01 — Marked & outlook + Eiendom Norge prisstatistikk */}
       <section
         className="border p-8"
         style={{ borderColor: COL.border, background: COL.card }}
@@ -811,20 +796,37 @@ function DashboardPage({ data, totals }) {
             Marked & outlook
           </h2>
         </div>
-        <div
-          className="text-[15px] leading-[1.7] whitespace-pre-line"
-          style={{ color: COL.inkSoft, maxWidth: "65ch" }}
-        >
-          {data.market.outlook}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+          <div
+            className="md:col-span-3 text-[15px] leading-[1.7] whitespace-pre-line"
+            style={{ color: COL.inkSoft }}
+          >
+            {data.market.outlook}
+          </div>
+          {data.market?.imageUrl ? (
+            <div className="md:col-span-2">
+              <img
+                src={data.market.imageUrl}
+                alt={data.market.imageCaption || "Markedsstatistikk"}
+                className="w-full h-auto"
+                style={{ border: `1px solid ${COL.border}` }}
+              />
+              {data.market.imageCaption && (
+                <div
+                  className="mt-2 text-[11px]"
+                  style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
+                >
+                  {data.market.imageCaption}
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
       </section>
 
-      {/* Chart */}
-      <section
-        className="border p-8"
-        style={{ borderColor: COL.border, background: COL.card }}
-      >
-        <div className="mb-6">
+      {/* §02 — Prosjektstatus: KPI-kort + omsetning/DB chart */}
+      <section className="space-y-6">
+        <div>
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-1"
             style={{ color: COL.muted }}
@@ -839,8 +841,50 @@ function DashboardPage({ data, totals }) {
               letterSpacing: "-0.01em",
             }}
           >
-            Omsetning & dekningsbidrag per prosjekt
+            Prosjektstatus
           </h2>
+        </div>
+        <div className="grid grid-cols-4 gap-px" style={{ background: COL.border }}>
+          <KPICard
+            label="Total porteføljeverdi"
+            value={fmtMrd(totals.omsetning)}
+            sub={`Justert for eierandeler: ${fmtMrd(totals.omsetningJustert)}`}
+            accent
+          />
+          <KPICard
+            label="Dekningsbidrag"
+            value={fmtMrd(totals.db)}
+            sub={`Justert for eierandeler: ${fmtMrd(totals.dbJustert)}`}
+          />
+          <KPICard
+            label="DB-margin"
+            value={fmtPct(totals.margin)}
+            sub="Justert for eierandeler"
+          />
+          <KPICard
+            label="Boliger under utvikling"
+            value={fmtNOK(totals.units) + "+"}
+            sub="Total prosjektscope"
+          />
+        </div>
+      </section>
+
+      {/* Chart — del av §02 Prosjektstatus */}
+      <section
+        className="border p-8"
+        style={{ borderColor: COL.border, background: COL.card }}
+      >
+        <div className="mb-6">
+          <h3
+            className="text-lg"
+            style={{
+              fontFamily: "'Fraunces', serif",
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Omsetning & dekningsbidrag per prosjekt
+          </h3>
           <div className="text-xs mt-1" style={{ color: COL.muted }}>
             Beløp i mNOK
           </div>
@@ -882,6 +926,30 @@ function DashboardPage({ data, totals }) {
             <Bar dataKey="DB" fill={COL.gold} radius={[0, 2, 2, 0]} />
           </BarChart>
         </ResponsiveContainer>
+      </section>
+
+      {/* §03 — Selskapstall: NAV + EK-binding chart */}
+      <section className="space-y-6">
+        <div>
+          <div
+            className="text-[10px] tracking-[0.2em] uppercase mb-1"
+            style={{ color: COL.muted }}
+          >
+            §03
+          </div>
+          <h2
+            className="text-2xl"
+            style={{
+              fontFamily: "'Fraunces', serif",
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Selskapstall
+          </h2>
+        </div>
+        <NAVCard totals={totals} />
+        <CapitalSummary financials={data.financials || []} />
       </section>
     </div>
   );
