@@ -25,6 +25,10 @@ import {
   Copy,
   Check,
   ShieldCheck,
+  Archive,
+  Upload,
+  ExternalLink,
+  FolderOpen,
 } from "lucide-react";
 import {
   BarChart,
@@ -552,6 +556,7 @@ function AdminDashboard() {
     { id: "portfolio", label: "Portefølje", icon: Building2 },
     { id: "pipeline", label: "Pipeline", icon: Target },
     { id: "financials", label: "Selskapstall", icon: TrendingUp },
+    { id: "archive", label: "Arkiv", icon: Archive },
     { id: "report", label: "Rapport", icon: FileText },
   ];
 
@@ -719,6 +724,9 @@ function AdminDashboard() {
           )}
           {page === "financials" && (
             <FinancialsPage data={data} setData={setData} totals={totals} />
+          )}
+          {page === "archive" && (
+            <ArkivPage data={data} canEdit={true} />
           )}
           {page === "report" && (
             <ReportPage data={data} totals={totals} />
@@ -3609,6 +3617,547 @@ function NumCell({ value, onChange }) {
         color: COL.ink,
       }}
     />
+  );
+}
+
+// ---------------- ARKIV PAGE ----------------
+const ARCHIVE_CATEGORIES = [
+  { id: "manedsrapport", label: "Månedsrapporter", singular: "Månedsrapport" },
+  { id: "styregrunnlag", label: "Styregrunnlag", singular: "Styregrunnlag" },
+  { id: "protokoll", label: "Protokoller", singular: "Protokoll" },
+];
+
+function slugify(s) {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/æ/g, "ae").replace(/ø/g, "o").replace(/å/g, "a")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "doc";
+}
+
+function formatBytes(b) {
+  if (!b) return "—";
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function ArkivPage({ data, canEdit }) {
+  const [activeCat, setActiveCat] = useState("manedsrapport");
+  const [docs, setDocs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showUpload, setShowUpload] = useState(false);
+  const [error, setError] = useState(null);
+
+  const loadDocs = async () => {
+    setLoading(true);
+    setError(null);
+    const { data: rows, error: err } = await supabase
+      .from("archive_documents")
+      .select("*")
+      .eq("category", activeCat)
+      .order("document_date", { ascending: false, nullsFirst: false })
+      .order("uploaded_at", { ascending: false });
+    if (err) {
+      setError(err.message);
+      setDocs([]);
+    } else {
+      setDocs(rows || []);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadDocs();
+  }, [activeCat]);
+
+  const handleDownload = async (doc) => {
+    const { data: signed, error: err } = await supabase.storage
+      .from("arkiv")
+      .createSignedUrl(doc.file_path, 60);
+    if (err || !signed?.signedUrl) {
+      alert("Kunne ikke åpne fil: " + (err?.message || "ukjent feil"));
+      return;
+    }
+    window.open(signed.signedUrl, "_blank");
+  };
+
+  const handleDelete = async (doc) => {
+    if (!confirm(`Slette "${doc.title}"? Denne handlingen kan ikke angres.`)) return;
+    const { error: storageErr } = await supabase.storage
+      .from("arkiv")
+      .remove([doc.file_path]);
+    if (storageErr) {
+      alert("Klarte ikke slette fil: " + storageErr.message);
+      return;
+    }
+    const { error: dbErr } = await supabase
+      .from("archive_documents")
+      .delete()
+      .eq("id", doc.id);
+    if (dbErr) {
+      alert("Klarte ikke slette metadata: " + dbErr.message);
+      return;
+    }
+    loadDocs();
+  };
+
+  const currentLabel = ARCHIVE_CATEGORIES.find((c) => c.id === activeCat)?.label;
+
+  return (
+    <div>
+      {/* Header with tabs */}
+      <div className="mb-6">
+        <div
+          className="text-[11px] tracking-[0.2em] uppercase mb-2"
+          style={{ color: COL.muted }}
+        >
+          Dokumentarkiv
+        </div>
+        <h2
+          className="text-3xl mb-6"
+          style={{
+            fontFamily: "'Playfair Display', serif",
+            fontWeight: 500,
+            letterSpacing: "-0.01em",
+          }}
+        >
+          {currentLabel}
+        </h2>
+
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex gap-1 p-1 rounded" style={{ background: COL.paperWarm }}>
+            {ARCHIVE_CATEGORIES.map((c) => {
+              const active = c.id === activeCat;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setActiveCat(c.id)}
+                  className="px-4 py-2 text-sm rounded transition-all"
+                  style={{
+                    background: active ? COL.ink : "transparent",
+                    color: active ? COL.paper : COL.inkSoft,
+                    fontWeight: active ? 600 : 500,
+                  }}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+          {canEdit && (
+            <button
+              onClick={() => setShowUpload(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded text-sm transition-all"
+              style={{
+                background: COL.ink,
+                color: COL.paper,
+                fontWeight: 600,
+              }}
+            >
+              <Upload size={14} strokeWidth={2} />
+              Last opp
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Document list */}
+      <div
+        className="border rounded"
+        style={{ borderColor: COL.border, background: COL.card }}
+      >
+        {loading ? (
+          <div className="p-12 text-center" style={{ color: COL.muted }}>
+            <Loader2 size={20} className="animate-spin mx-auto mb-2" />
+            <div className="text-sm">Laster dokumenter…</div>
+          </div>
+        ) : error ? (
+          <div className="p-12 text-center text-sm" style={{ color: COL.burgundy }}>
+            <AlertCircle size={20} className="mx-auto mb-2" />
+            {error}
+          </div>
+        ) : docs.length === 0 ? (
+          <div className="p-12 text-center" style={{ color: COL.muted }}>
+            <FolderOpen size={28} strokeWidth={1.5} className="mx-auto mb-3 opacity-40" />
+            <div className="text-sm">
+              Ingen {currentLabel?.toLowerCase()} lastet opp ennå.
+            </div>
+          </div>
+        ) : (
+          <div className="divide-y" style={{ borderColor: COL.borderSoft }}>
+            {docs.map((doc) => (
+              <div
+                key={doc.id}
+                className="px-5 py-4 flex items-center gap-4 hover:bg-black/[0.02] transition-colors"
+              >
+                <FileText size={18} strokeWidth={1.5} style={{ color: COL.gold }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <div
+                      className="text-sm"
+                      style={{ fontWeight: 600, color: COL.ink }}
+                    >
+                      {doc.title}
+                    </div>
+                    {doc.period && (
+                      <div className="text-xs" style={{ color: COL.muted }}>
+                        · {doc.period}
+                      </div>
+                    )}
+                    {doc.project_ref && (
+                      <div className="text-xs" style={{ color: COL.gold }}>
+                        · {doc.project_ref}
+                      </div>
+                    )}
+                  </div>
+                  <div
+                    className="text-[11px] mt-1 flex items-center gap-3"
+                    style={{
+                      color: COL.muted,
+                      fontFamily: "'JetBrains Mono', monospace",
+                    }}
+                  >
+                    <span>
+                      Lastet opp{" "}
+                      {new Date(doc.uploaded_at).toLocaleDateString("nb-NO", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                    <span>{formatBytes(doc.file_size)}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDownload(doc)}
+                  className="p-2 rounded transition-all"
+                  style={{ color: COL.inkSoft }}
+                  title="Åpne dokument"
+                >
+                  <ExternalLink size={16} strokeWidth={1.75} />
+                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => handleDelete(doc)}
+                    className="p-2 rounded transition-all"
+                    style={{ color: COL.burgundy }}
+                    title="Slett dokument"
+                  >
+                    <Trash2 size={16} strokeWidth={1.75} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showUpload && (
+        <ArkivUploadModal
+          defaultCategory={activeCat}
+          projects={data.projects || []}
+          onClose={() => setShowUpload(false)}
+          onUploaded={() => {
+            setShowUpload(false);
+            loadDocs();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ArkivUploadModal({ defaultCategory, projects, onClose, onUploaded }) {
+  const [category, setCategory] = useState(defaultCategory);
+  const [title, setTitle] = useState("");
+  const [period, setPeriod] = useState("");
+  const [docDate, setDocDate] = useState("");
+  const [projectRef, setProjectRef] = useState("");
+  const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleFileChange = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.type !== "application/pdf") {
+      setError("Filen må være en PDF.");
+      e.target.value = "";
+      return;
+    }
+    if (f.size > 50 * 1024 * 1024) {
+      setError(`Filen er ${(f.size / 1024 / 1024).toFixed(1)} MB. Maks 50 MB.`);
+      e.target.value = "";
+      return;
+    }
+    setError(null);
+    setFile(f);
+    if (!title) setTitle(f.name.replace(/\.pdf$/i, ""));
+  };
+
+  const handleSubmit = async () => {
+    if (!file) {
+      setError("Velg en PDF-fil først.");
+      return;
+    }
+    if (!title.trim()) {
+      setError("Tittel er påkrevd.");
+      return;
+    }
+    setUploading(true);
+    setError(null);
+
+    try {
+      const id = crypto.randomUUID();
+      const slug = slugify(title);
+      const path = `${category}/${id}-${slug}.pdf`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from("arkiv")
+        .upload(path, file, {
+          contentType: "application/pdf",
+          upsert: false,
+        });
+      if (uploadErr) throw uploadErr;
+
+      const { data: userData } = await supabase.auth.getUser();
+      const { error: insertErr } = await supabase
+        .from("archive_documents")
+        .insert({
+          id,
+          category,
+          title: title.trim(),
+          period: period.trim() || null,
+          document_date: docDate || null,
+          project_ref: projectRef || null,
+          file_path: path,
+          file_name: file.name,
+          file_size: file.size,
+          uploaded_by: userData?.user?.id || null,
+        });
+      if (insertErr) {
+        // try to clean up storage if metadata insert failed
+        await supabase.storage.from("arkiv").remove([path]);
+        throw insertErr;
+      }
+      onUploaded();
+    } catch (err) {
+      setError(err?.message || String(err));
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(14,26,43,0.55)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg border rounded shadow-xl"
+        style={{ background: COL.paper, borderColor: COL.border }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="px-6 py-4 border-b flex items-center justify-between"
+          style={{ borderColor: COL.border, background: COL.paperWarm }}
+        >
+          <h3
+            className="text-lg"
+            style={{ fontFamily: "'Playfair Display', serif", fontWeight: 500 }}
+          >
+            Last opp dokument
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-black/10"
+            disabled={uploading}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label
+              className="block text-[11px] tracking-[0.15em] uppercase mb-1.5"
+              style={{ color: COL.muted }}
+            >
+              Type
+            </label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full px-3 py-2 border rounded text-sm bg-white"
+              style={{ borderColor: COL.border }}
+              disabled={uploading}
+            >
+              {ARCHIVE_CATEGORIES.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.singular}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              className="block text-[11px] tracking-[0.15em] uppercase mb-1.5"
+              style={{ color: COL.muted }}
+            >
+              Tittel <span style={{ color: COL.burgundy }}>*</span>
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="f.eks. Hamang – kjøp av utviklingseiendom"
+              className="w-full px-3 py-2 border rounded text-sm bg-white"
+              style={{ borderColor: COL.border }}
+              disabled={uploading}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label
+                className="block text-[11px] tracking-[0.15em] uppercase mb-1.5"
+                style={{ color: COL.muted }}
+              >
+                Periode
+              </label>
+              <input
+                type="text"
+                value={period}
+                onChange={(e) => setPeriod(e.target.value)}
+                placeholder="f.eks. Juli – August 2024"
+                className="w-full px-3 py-2 border rounded text-sm bg-white"
+                style={{ borderColor: COL.border }}
+                disabled={uploading}
+              />
+            </div>
+            <div>
+              <label
+                className="block text-[11px] tracking-[0.15em] uppercase mb-1.5"
+                style={{ color: COL.muted }}
+              >
+                Dato
+              </label>
+              <input
+                type="date"
+                value={docDate}
+                onChange={(e) => setDocDate(e.target.value)}
+                className="w-full px-3 py-2 border rounded text-sm bg-white"
+                style={{ borderColor: COL.border }}
+                disabled={uploading}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label
+              className="block text-[11px] tracking-[0.15em] uppercase mb-1.5"
+              style={{ color: COL.muted }}
+            >
+              Knytt til prosjekt (valgfritt)
+            </label>
+            <select
+              value={projectRef}
+              onChange={(e) => setProjectRef(e.target.value)}
+              className="w-full px-3 py-2 border rounded text-sm bg-white"
+              style={{ borderColor: COL.border }}
+              disabled={uploading}
+            >
+              <option value="">— Ingen —</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              className="block text-[11px] tracking-[0.15em] uppercase mb-1.5"
+              style={{ color: COL.muted }}
+            >
+              PDF-fil <span style={{ color: COL.burgundy }}>*</span>
+            </label>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={handleFileChange}
+              className="w-full text-sm"
+              disabled={uploading}
+            />
+            {file && (
+              <div
+                className="text-xs mt-1.5"
+                style={{
+                  color: COL.muted,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              >
+                {file.name} · {formatBytes(file.size)}
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <div
+              className="text-xs p-3 rounded"
+              style={{ background: "rgba(139,46,58,0.1)", color: COL.burgundy }}
+            >
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div
+          className="px-6 py-4 border-t flex justify-end gap-2"
+          style={{ borderColor: COL.border }}
+        >
+          <button
+            onClick={onClose}
+            disabled={uploading}
+            className="px-4 py-2 text-sm rounded border"
+            style={{
+              borderColor: COL.border,
+              color: COL.inkSoft,
+            }}
+          >
+            Avbryt
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={uploading || !file || !title.trim()}
+            className="px-4 py-2 text-sm rounded flex items-center gap-2"
+            style={{
+              background: uploading ? COL.muted : COL.ink,
+              color: COL.paper,
+              fontWeight: 600,
+              opacity: !file || !title.trim() ? 0.5 : 1,
+            }}
+          >
+            {uploading ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                Laster opp…
+              </>
+            ) : (
+              <>
+                <Upload size={14} />
+                Last opp
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

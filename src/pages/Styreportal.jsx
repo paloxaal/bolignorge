@@ -15,6 +15,9 @@ import {
   LogOut,
   Download,
   FileText,
+  Archive,
+  AlertCircle,
+  FolderOpen,
 } from "lucide-react";
 import {
   BarChart,
@@ -460,6 +463,10 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
     { id: "portfolio", label: "Portefølje", icon: Building2 },
     { id: "pipeline", label: "Pipeline", icon: Target },
     { id: "financials", label: "Selskapstall", icon: TrendingUp },
+    // Arkiv krever autentisert lesetilgang — skjules i share-modus
+    ...(mode === "share"
+      ? []
+      : [{ id: "archive", label: "Arkiv", icon: Archive }]),
   ];
 
   return (
@@ -689,6 +696,9 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           )}
           {page === "financials" && (
             <FinancialsPage data={data} totals={totals} />
+          )}
+          {page === "archive" && mode !== "share" && (
+            <ArkivPage data={data} canEdit={false} />
           )}
         </div>
 
@@ -2843,6 +2853,178 @@ function CaseViewer({ caseData, onClose }) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- ARKIV (read-only) ----------------
+const ARCHIVE_CATEGORIES = [
+  { id: "manedsrapport", label: "Månedsrapporter", singular: "Månedsrapport" },
+  { id: "styregrunnlag", label: "Styregrunnlag", singular: "Styregrunnlag" },
+  { id: "protokoll", label: "Protokoller", singular: "Protokoll" },
+];
+
+function formatBytes(b) {
+  if (!b) return "—";
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function ArkivPage({ data, canEdit }) {
+  const [activeCat, setActiveCat] = useState("manedsrapport");
+  const [docs, setDocs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const loadDocs = async () => {
+    setLoading(true);
+    setError(null);
+    const { data: rows, error: err } = await supabase
+      .from("archive_documents")
+      .select("*")
+      .eq("category", activeCat)
+      .order("document_date", { ascending: false, nullsFirst: false })
+      .order("uploaded_at", { ascending: false });
+    if (err) {
+      setError(err.message);
+      setDocs([]);
+    } else {
+      setDocs(rows || []);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadDocs();
+  }, [activeCat]);
+
+  const handleDownload = async (doc) => {
+    const { data: signed, error: err } = await supabase.storage
+      .from("arkiv")
+      .createSignedUrl(doc.file_path, 60);
+    if (err || !signed?.signedUrl) {
+      alert("Kunne ikke åpne fil: " + (err?.message || "ukjent feil"));
+      return;
+    }
+    window.open(signed.signedUrl, "_blank");
+  };
+
+  const currentLabel = ARCHIVE_CATEGORIES.find((c) => c.id === activeCat)?.label;
+
+  return (
+    <div>
+      <div className="mb-6">
+        <div
+          className="text-[11px] tracking-[0.2em] uppercase mb-2"
+          style={{ color: COL.muted }}
+        >
+          Dokumentarkiv
+        </div>
+        <h2
+          className="text-3xl mb-6"
+          style={{
+            fontFamily: "'Playfair Display', serif",
+            fontWeight: 500,
+            letterSpacing: "-0.01em",
+          }}
+        >
+          {currentLabel}
+        </h2>
+
+        <div className="flex gap-1 p-1 rounded inline-flex" style={{ background: COL.paperWarm }}>
+          {ARCHIVE_CATEGORIES.map((c) => {
+            const active = c.id === activeCat;
+            return (
+              <button
+                key={c.id}
+                onClick={() => setActiveCat(c.id)}
+                className="px-4 py-2 text-sm rounded transition-all"
+                style={{
+                  background: active ? COL.ink : "transparent",
+                  color: active ? COL.paper : COL.inkSoft,
+                  fontWeight: active ? 600 : 500,
+                }}
+              >
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div
+        className="border rounded"
+        style={{ borderColor: COL.border, background: COL.card }}
+      >
+        {loading ? (
+          <div className="p-12 text-center" style={{ color: COL.muted }}>
+            <Loader2 size={20} className="animate-spin mx-auto mb-2" />
+            <div className="text-sm">Laster dokumenter…</div>
+          </div>
+        ) : error ? (
+          <div className="p-12 text-center text-sm" style={{ color: COL.burgundy }}>
+            <AlertCircle size={20} className="mx-auto mb-2" />
+            {error}
+          </div>
+        ) : docs.length === 0 ? (
+          <div className="p-12 text-center" style={{ color: COL.muted }}>
+            <FolderOpen size={28} strokeWidth={1.5} className="mx-auto mb-3 opacity-40" />
+            <div className="text-sm">
+              Ingen {currentLabel?.toLowerCase()} lastet opp ennå.
+            </div>
+          </div>
+        ) : (
+          <div className="divide-y" style={{ borderColor: COL.borderSoft }}>
+            {docs.map((doc) => (
+              <div
+                key={doc.id}
+                className="px-5 py-4 flex items-center gap-4 hover:bg-black/[0.02] transition-colors cursor-pointer"
+                onClick={() => handleDownload(doc)}
+              >
+                <FileText size={18} strokeWidth={1.5} style={{ color: COL.gold }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <div
+                      className="text-sm"
+                      style={{ fontWeight: 600, color: COL.ink }}
+                    >
+                      {doc.title}
+                    </div>
+                    {doc.period && (
+                      <div className="text-xs" style={{ color: COL.muted }}>
+                        · {doc.period}
+                      </div>
+                    )}
+                    {doc.project_ref && (
+                      <div className="text-xs" style={{ color: COL.gold }}>
+                        · {doc.project_ref}
+                      </div>
+                    )}
+                  </div>
+                  <div
+                    className="text-[11px] mt-1 flex items-center gap-3"
+                    style={{
+                      color: COL.muted,
+                      fontFamily: "'JetBrains Mono', monospace",
+                    }}
+                  >
+                    <span>
+                      {new Date(doc.uploaded_at).toLocaleDateString("nb-NO", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                    <span>{formatBytes(doc.file_size)}</span>
+                  </div>
+                </div>
+                <ExternalLink size={16} strokeWidth={1.75} style={{ color: COL.inkSoft }} />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
