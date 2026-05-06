@@ -800,14 +800,17 @@ function DashboardPage({ data, totals }) {
         </div>
       </section>
 
-      {/* §02 — Prosjektstatus: KPI-kort + omsetning/DB chart */}
+      {/* §02 — Prosjekt for prosjekt */}
+      <ProjectByProjectSection data={data} num="02" />
+
+      {/* §03 — Prosjektstatus: KPI-kort + omsetning/DB chart */}
       <section className="space-y-6">
         <div>
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-1"
             style={{ color: COL.muted }}
           >
-            §02
+            §03
           </div>
           <h2
             className="text-2xl"
@@ -904,14 +907,14 @@ function DashboardPage({ data, totals }) {
         </ResponsiveContainer>
       </section>
 
-      {/* §03 — Selskapstall: NAV + EK-binding chart */}
+      {/* §04 — Selskapstall: NAV + EK-binding chart */}
       <section className="space-y-6">
         <div>
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-1"
             style={{ color: COL.muted }}
           >
-            §03
+            §04
           </div>
           <h2
             className="text-2xl"
@@ -1046,6 +1049,164 @@ function KPICard({ label, value, accent, sub }) {
           {sub}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------- PROSJEKT FOR PROSJEKT (gjenbrukbar) ----------------
+function ProjectByProjectSection({ data, num }) {
+  const projects = data.projects || [];
+  if (projects.length === 0) return null;
+  return (
+    <section>
+      <SectionHeader num={num} title="Prosjekt for prosjekt" />
+      <div className="mt-6 space-y-8">
+        {projects.map((p) => {
+          const sold = Number(p.unitsSold) || 0;
+          const total = Number(p.units) || 0;
+          const pct = total > 0 ? Math.round((sold / total) * 100) : 0;
+          return (
+            <div
+              key={p.id}
+              className="grid grid-cols-3 gap-8 pb-8"
+              style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
+            >
+              <div>
+                <h4
+                  className="text-xl mb-1"
+                  style={{
+                    fontFamily: "'Fraunces', serif",
+                    fontWeight: 500,
+                    color: COL.ink,
+                  }}
+                >
+                  {p.name}
+                </h4>
+                <div className="text-xs mb-4" style={{ color: COL.muted }}>
+                  {p.location}
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <FactRow
+                    label="Antall boliger"
+                    value={total > 0 ? total : "—"}
+                  />
+                  {sold > 0 && total > 0 && (
+                    <FactRow
+                      label="Solgt"
+                      value={`${sold} (${pct} %)`}
+                    />
+                  )}
+                  {sold > 0 && total > 0 && (
+                    <FactRow
+                      label="Ledig"
+                      value={Math.max(0, total - sold)}
+                    />
+                  )}
+                  {p.kvm > 0 && (
+                    <FactRow label="BRA-S" value={fmtNOK(p.kvm) + " kvm"} />
+                  )}
+                  {p.byggestart && (
+                    <FactRow
+                      label="Byggeperiode"
+                      value={`${p.byggestart}–${p.byggeslutt || "?"}`}
+                    />
+                  )}
+                  <FactRow label="Status" value={p.statusShort} />
+                  <FactRow
+                    label="Omsetning"
+                    value={p.omsetning > 0 ? fmtMrd(p.omsetning) : "—"}
+                  />
+                  <FactRow
+                    label="DB"
+                    value={p.db > 0 ? fmtMrd(p.db) : "—"}
+                  />
+                  {p.partner && (
+                    <FactRow
+                      label="Partner"
+                      value={
+                        (p.partnerShare ? p.partnerShare + "% " : "") +
+                        p.partner
+                      }
+                    />
+                  )}
+                  {p.website && (
+                    <a
+                      href={p.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block mt-2 text-xs"
+                      style={{ color: COL.gold }}
+                    >
+                      {p.website.replace(/^https?:\/\//, "")} ↗
+                    </a>
+                  )}
+                </div>
+              </div>
+              <div className="col-span-2">
+                <div
+                  className="text-[10px] tracking-[0.2em] uppercase mb-2"
+                  style={{ color: COL.muted }}
+                >
+                  Status
+                </div>
+                <p
+                  className="text-[13px] leading-[1.7] whitespace-pre-line"
+                  style={{ color: COL.inkSoft }}
+                >
+                  {p.statusLong || (
+                    <em style={{ color: COL.muted }}>Ingen statustekst.</em>
+                  )}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function SectionHeader({ num, title }) {
+  return (
+    <div
+      className="flex items-baseline gap-4 pb-2"
+      style={{ borderBottom: `1px solid ${COL.border}` }}
+    >
+      <span
+        className="text-[10px] tracking-[0.25em] uppercase"
+        style={{ color: COL.gold, fontFamily: "'JetBrains Mono', monospace" }}
+      >
+        §{num}
+      </span>
+      <h2
+        className="text-[26px]"
+        style={{
+          fontFamily: "'Fraunces', serif",
+          fontWeight: 500,
+          letterSpacing: "-0.01em",
+        }}
+      >
+        {title}
+      </h2>
+    </div>
+  );
+}
+
+function FactRow({ label, value }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <span
+        className="text-[10px] tracking-[0.15em] uppercase"
+        style={{ color: COL.muted }}
+      >
+        {label}
+      </span>
+      <span
+        className="font-mono"
+        style={{ fontFamily: "'JetBrains Mono', monospace", color: COL.ink }}
+      >
+        {value}
+      </span>
     </div>
   );
 }

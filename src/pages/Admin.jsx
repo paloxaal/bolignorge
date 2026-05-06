@@ -1144,14 +1144,17 @@ function DashboardPage({ data, setData, totals }) {
         )}
       </section>
 
-      {/* §02 — Prosjektstatus: KPI-kort + omsetning/DB chart */}
+      {/* §02 — Prosjekt for prosjekt */}
+      <ProjectByProjectSection data={data} num="02" />
+
+      {/* §03 — Prosjektstatus: KPI-kort + omsetning/DB chart */}
       <section className="space-y-6">
         <div>
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-1"
             style={{ color: COL.muted }}
           >
-            §02
+            §03
           </div>
           <h2
             className="text-2xl"
@@ -1246,14 +1249,14 @@ function DashboardPage({ data, setData, totals }) {
         </div>
       </section>
 
-      {/* §03 — Selskapstall: NAV + EK-binding chart */}
+      {/* §04 — Selskapstall: NAV + EK-binding chart */}
       <section className="space-y-6">
         <div>
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-1"
             style={{ color: COL.muted }}
           >
-            §03
+            §04
           </div>
           <h2
             className="text-2xl"
@@ -3441,9 +3444,12 @@ function ReportPage({ data, totals }) {
             </div>
           </section>
 
+          {/* Prosjekt for prosjekt */}
+          <ProjectByProjectSection data={data} num="03" />
+
           {/* Portefølje */}
           <section>
-            <SectionHeader num="03" title="Porteføljeoversikt" />
+            <SectionHeader num="04" title="Porteføljeoversikt" />
             <table className="w-full text-sm mt-4">
               <thead>
                 <tr style={{ borderBottom: `2px solid ${COL.ink}` }}>
@@ -3525,7 +3531,7 @@ function ReportPage({ data, totals }) {
 
           {/* Verdijustert egenkapital */}
           <section>
-            <SectionHeader num="04" title="Verdijustert egenkapital" />
+            <SectionHeader num="05" title="Verdijustert egenkapital" />
             <div className="mt-4 grid grid-cols-3 gap-px" style={{ background: COL.border }}>
               <ReportKPI label="Bokført EK" value={fmtNOK(totals.bokfortEK) + " m"} />
               <ReportKPI label="Merverdier eiendom" value={fmtNOK(totals.merverdier) + " m"} />
@@ -3540,10 +3546,20 @@ function ReportPage({ data, totals }) {
             </div>
           </section>
 
+          {/* Selskapstall — EK-binding chart + tabell */}
+          {(data.financials?.length || 0) > 0 && (
+            <section>
+              <SectionHeader num="06" title="Selskapstall" />
+              <div className="mt-4">
+                <CapitalSummary financials={data.financials || []} />
+              </div>
+            </section>
+          )}
+
           {/* Pipeline */}
           {(data.pipeline?.length || 0) > 0 && (
             <section>
-              <SectionHeader num="05" title="Pipeline · case i vurdering" />
+              <SectionHeader num="07" title="Pipeline · case i vurdering" />
               <table className="w-full text-sm mt-4">
                 <thead>
                   <tr style={{ borderBottom: `2px solid ${COL.ink}` }}>
@@ -3618,93 +3634,6 @@ function ReportPage({ data, totals }) {
               </table>
             </section>
           )}
-
-          {/* Prosjekt for prosjekt */}
-          <section>
-            <SectionHeader
-              num={data.pipeline?.length ? "06" : "04"}
-              title="Prosjekt for prosjekt"
-            />
-            <div className="mt-6 space-y-8">
-              {data.projects.map((p) => (
-                <div key={p.id} className="grid grid-cols-3 gap-8 pb-8" style={{ borderBottom: `1px solid ${COL.borderSoft}` }}>
-                  <div>
-                    <h4
-                      className="text-xl mb-1"
-                      style={{
-                        fontFamily: "'Fraunces', serif",
-                        fontWeight: 500,
-                        color: COL.ink,
-                      }}
-                    >
-                      {p.name}
-                    </h4>
-                    <div className="text-xs mb-4" style={{ color: COL.muted }}>
-                      {p.location}
-                    </div>
-                    <div className="space-y-1.5 text-xs">
-                      <FactRow label="Antall boliger" value={p.units > 0 ? p.units : "—"} />
-                      {p.kvm > 0 && (
-                        <FactRow
-                          label="BRA-S"
-                          value={fmtNOK(p.kvm) + " kvm"}
-                        />
-                      )}
-                      {p.byggestart && (
-                        <FactRow
-                          label="Byggeperiode"
-                          value={`${p.byggestart}–${p.byggeslutt || "?"}`}
-                        />
-                      )}
-                      <FactRow label="Status" value={p.statusShort} />
-                      <FactRow
-                        label="Omsetning"
-                        value={p.omsetning > 0 ? fmtMrd(p.omsetning) : "—"}
-                      />
-                      <FactRow
-                        label="DB"
-                        value={p.db > 0 ? fmtMrd(p.db) : "—"}
-                      />
-                      {p.partner && (
-                        <FactRow
-                          label="Partner"
-                          value={
-                            (p.partnerShare ? p.partnerShare + "% " : "") +
-                            p.partner
-                          }
-                        />
-                      )}
-                      {p.website && (
-                        <a
-                          href={p.website}
-                          className="block mt-2 text-xs"
-                          style={{ color: COL.gold }}
-                        >
-                          {p.website.replace(/^https?:\/\//, "")} ↗
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  <div className="col-span-2">
-                    <div
-                      className="text-[10px] tracking-[0.2em] uppercase mb-2"
-                      style={{ color: COL.muted }}
-                    >
-                      Status
-                    </div>
-                    <p
-                      className="text-[13px] leading-[1.7]"
-                      style={{ color: COL.inkSoft }}
-                    >
-                      {p.statusLong || (
-                        <em style={{ color: COL.muted }}>Ingen statustekst.</em>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
         </div>
 
         {/* Footer */}
@@ -3719,6 +3648,119 @@ function ReportPage({ data, totals }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------- PROSJEKT FOR PROSJEKT (gjenbrukbar) ----------------
+function ProjectByProjectSection({ data, num }) {
+  const projects = data.projects || [];
+  if (projects.length === 0) return null;
+  return (
+    <section>
+      <SectionHeader num={num} title="Prosjekt for prosjekt" />
+      <div className="mt-6 space-y-8">
+        {projects.map((p) => {
+          const sold = Number(p.unitsSold) || 0;
+          const total = Number(p.units) || 0;
+          const pct = total > 0 ? Math.round((sold / total) * 100) : 0;
+          return (
+            <div
+              key={p.id}
+              className="grid grid-cols-3 gap-8 pb-8"
+              style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
+            >
+              <div>
+                <h4
+                  className="text-xl mb-1"
+                  style={{
+                    fontFamily: "'Fraunces', serif",
+                    fontWeight: 500,
+                    color: COL.ink,
+                  }}
+                >
+                  {p.name}
+                </h4>
+                <div className="text-xs mb-4" style={{ color: COL.muted }}>
+                  {p.location}
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <FactRow
+                    label="Antall boliger"
+                    value={total > 0 ? total : "—"}
+                  />
+                  {sold > 0 && total > 0 && (
+                    <FactRow
+                      label="Solgt"
+                      value={`${sold} (${pct} %)`}
+                    />
+                  )}
+                  {sold > 0 && total > 0 && (
+                    <FactRow
+                      label="Ledig"
+                      value={Math.max(0, total - sold)}
+                    />
+                  )}
+                  {p.kvm > 0 && (
+                    <FactRow label="BRA-S" value={fmtNOK(p.kvm) + " kvm"} />
+                  )}
+                  {p.byggestart && (
+                    <FactRow
+                      label="Byggeperiode"
+                      value={`${p.byggestart}–${p.byggeslutt || "?"}`}
+                    />
+                  )}
+                  <FactRow label="Status" value={p.statusShort} />
+                  <FactRow
+                    label="Omsetning"
+                    value={p.omsetning > 0 ? fmtMrd(p.omsetning) : "—"}
+                  />
+                  <FactRow
+                    label="DB"
+                    value={p.db > 0 ? fmtMrd(p.db) : "—"}
+                  />
+                  {p.partner && (
+                    <FactRow
+                      label="Partner"
+                      value={
+                        (p.partnerShare ? p.partnerShare + "% " : "") +
+                        p.partner
+                      }
+                    />
+                  )}
+                  {p.website && (
+                    <a
+                      href={p.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block mt-2 text-xs"
+                      style={{ color: COL.gold }}
+                    >
+                      {p.website.replace(/^https?:\/\//, "")} ↗
+                    </a>
+                  )}
+                </div>
+              </div>
+              <div className="col-span-2">
+                <div
+                  className="text-[10px] tracking-[0.2em] uppercase mb-2"
+                  style={{ color: COL.muted }}
+                >
+                  Status
+                </div>
+                <p
+                  className="text-[13px] leading-[1.7] whitespace-pre-line"
+                  style={{ color: COL.inkSoft }}
+                >
+                  {p.statusLong || (
+                    <em style={{ color: COL.muted }}>Ingen statustekst.</em>
+                  )}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
