@@ -484,6 +484,21 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
+          /* IRR section is tall — always force new page so it stays whole */
+          .irr-section {
+            break-before: page !important;
+            page-break-before: always !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          /* Recharts/SVG charts must fit page width */
+          .recharts-responsive-container,
+          .recharts-wrapper,
+          svg.recharts-surface {
+            max-width: 100% !important;
+            width: 100% !important;
+            height: auto !important;
+          }
           /* Compact cover hero on print */
           .cover-hero { padding: 2.5rem !important; min-height: auto !important; }
           .cover-hero h1 { font-size: 3rem !important; }
@@ -1596,7 +1611,8 @@ function IRRSection({ financials, totals }) {
       : null;
   return (
     <div
-      className="mt-8 border"
+      className="mt-8 border irr-section"
+      data-no-break
       style={{ borderColor: COL.border, background: COL.card }}
     >
       <div
@@ -2865,6 +2881,18 @@ function FinancialsPage({ data, totals }) {
   }));
 
   const lastConfirmed = [...rows].reverse().find((r) => !r.projected);
+  // Latest row that has any meaningful data — used for the top KPIs so
+  // edits to projected years (e.g. 2026) propagate visibly
+  const latest = [...rows]
+    .reverse()
+    .find(
+      (r) =>
+        (r.result !== null && r.result !== undefined) ||
+        (r.ek !== null && r.ek !== undefined) ||
+        (r.dividend !== null && r.dividend !== undefined && r.dividend !== 0)
+    ) || rows[rows.length - 1];
+  const isProj = !!latest?.projected;
+  const projTag = isProj ? " *" : "";
 
   if (rows.length === 0) {
     return (
@@ -2887,23 +2915,43 @@ function FinancialsPage({ data, totals }) {
       {/* KPI-kort */}
       <div className="grid grid-cols-4 gap-px" style={{ background: COL.border }}>
         <KPICard
-          label={`Årsresultat ${lastConfirmed?.year}`}
-          value={fmtNOK(lastConfirmed?.result) + " m"}
+          label={`Årsresultat ${latest?.year}${projTag}`}
+          value={
+            latest?.result !== null && latest?.result !== undefined
+              ? fmtNOK(latest.result) + " m"
+              : "—"
+          }
+          sub={isProj ? "Foreløpig år" : null}
           accent
         />
         <KPICard
-          label={`EK ${lastConfirmed?.year}`}
-          value={fmtNOK(lastConfirmed?.ek) + " m"}
+          label={`EK ${latest?.year}${projTag}`}
+          value={
+            latest?.ek !== null && latest?.ek !== undefined
+              ? fmtNOK(latest.ek) + " m"
+              : "—"
+          }
+          sub={isProj ? "Foreløpig år" : null}
         />
         <KPICard
-          label="Akk. resultat"
-          value={fmtNOK(lastConfirmed?.accResult) + " m"}
+          label={`Akk. resultat${projTag}`}
+          value={fmtNOK(latest?.accResult) + " m"}
+          sub={isProj ? "Inkl. foreløpig" : null}
         />
         <KPICard
-          label="Utdelingsgrad akk."
-          value={fmtPct(lastConfirmed?.utdGrad)}
+          label={`Utdelingsgrad akk.${projTag}`}
+          value={fmtPct(latest?.utdGrad)}
+          sub={isProj ? "Inkl. foreløpig" : null}
         />
       </div>
+      {isProj && (
+        <div
+          className="text-[10px] tracking-[0.2em] uppercase -mt-6 text-right"
+          style={{ color: COL.muted }}
+        >
+          * Foreløpig — basert på prognose for {latest?.year}
+        </div>
+      )}
 
       {/* NAV — Verdijustert egenkapital */}
       {totals && <NAVCard totals={totals} />}
