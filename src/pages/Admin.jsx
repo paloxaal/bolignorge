@@ -380,32 +380,49 @@ const SEED = {
 const STORAGE_KEY = "bn_dashboard_v1";
 const storage = {
   get: async () => {
-    const { data, error } = await supabase
-      .from("dashboard_state")
-      .select("data")
-      .eq("id", "main")
-      .maybeSingle();
-    if (error) {
-      console.error("[dashboard] load error:", error.message);
+    try {
+      // Refresh sesjonen for å unngå at gammel token henger
+      await supabase.auth.getSession();
+      const queryPromise = supabase
+        .from("dashboard_state")
+        .select("data")
+        .eq("id", "main")
+        .maybeSingle();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout (10s)")), 10000)
+      );
+      const result = await Promise.race([queryPromise, timeoutPromise]);
+      const { data, error } = result;
+      if (error) {
+        console.error("[dashboard] load error:", error.message);
+        return null;
+      }
+      if (!data) return null;
+      return { value: JSON.stringify(data.data) };
+    } catch (e) {
+      console.error("[dashboard] load failed:", e.message);
       return null;
     }
-    if (!data) return null;
-    return { value: JSON.stringify(data.data) };
   },
   set: async (_key, value) => {
-    const { data: userData } = await supabase.auth.getUser();
-    const { error } = await supabase
-      .from("dashboard_state")
-      .upsert({
-        id: "main",
-        data: JSON.parse(value),
-        updated_by: userData?.user?.id ?? null,
-      });
-    if (error) {
-      console.error("[dashboard] save error:", error.message);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from("dashboard_state")
+        .upsert({
+          id: "main",
+          data: JSON.parse(value),
+          updated_by: userData?.user?.id ?? null,
+        });
+      if (error) {
+        console.error("[dashboard] save error:", error.message);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error("[dashboard] save failed:", e.message);
       return false;
     }
-    return true;
   },
 };
 const STATUS_CATEGORIES = [
