@@ -701,56 +701,51 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           <span>Styreportal · v{data.meta.reportYear}</span>
         </div>
 
-        {/* Back cover for print — only visible in print mode */}
+        {/* Back cover footer band for print — only visible in print mode */}
         <div
           data-report="keep"
           className="hidden print:block report-back-cover"
           style={{
             background: COL.ink,
             color: COL.paper,
-            padding: "5rem 4rem",
-            marginTop: "2rem",
-            breakBefore: "page",
-            pageBreakBefore: "always",
-            textAlign: "center",
+            padding: "2rem 3rem",
+            marginTop: "2.5rem",
+            breakInside: "avoid",
+            pageBreakInside: "avoid",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "2rem",
           }}
         >
-          <div style={{ marginBottom: "2.5rem", display: "flex", justifyContent: "center" }}>
-            <BNLogo light height={56} />
+          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
+            <BNLogo light height={28} />
+            <div
+              style={{
+                fontFamily: "'Playfair Display', serif",
+                fontSize: "1.1rem",
+                fontWeight: 400,
+                letterSpacing: "-0.01em",
+              }}
+            >
+              {data.meta?.companyName}
+            </div>
           </div>
           <div
             style={{
-              fontFamily: "'Playfair Display', serif",
-              fontSize: "2rem",
-              fontWeight: 400,
-              letterSpacing: "-0.01em",
-              marginBottom: "1.5rem",
-            }}
-          >
-            {data.meta?.companyName}
-          </div>
-          <div
-            style={{
-              fontSize: "10px",
+              fontSize: "9px",
               letterSpacing: "0.25em",
               textTransform: "uppercase",
               opacity: 0.6,
               fontFamily: "'JetBrains Mono', monospace",
+              textAlign: "right",
+              lineHeight: 1.6,
             }}
           >
-            Konfidensielt — kun for interne formål
-          </div>
-          <div
-            style={{
-              fontSize: "10px",
-              letterSpacing: "0.25em",
-              textTransform: "uppercase",
-              opacity: 0.5,
-              fontFamily: "'JetBrains Mono', monospace",
-              marginTop: "0.75rem",
-            }}
-          >
-            Månedsrapport · {data.meta?.reportPeriod} · {data.meta?.reportYear}
+            <div>Konfidensielt — kun for interne formål</div>
+            <div style={{ opacity: 0.7, marginTop: "2px" }}>
+              Månedsrapport · {data.meta?.reportPeriod} · {data.meta?.reportYear}
+            </div>
           </div>
         </div>
       </main>
