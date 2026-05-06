@@ -184,7 +184,7 @@ function Footer() {
       style={{ background: COL.inkDeep, color: COL.paper }}
     >
       <div className="max-w-[1280px] mx-auto px-6 lg:px-12">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-10 pb-10 border-b" style={{ borderColor: "rgba(246,241,231,0.12)" }}>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-10 pb-10 border-b" style={{ borderColor: "rgba(246,241,231,0.12)" }}>
           <FooterCol
             title="Selskap"
             items={[
@@ -213,13 +213,6 @@ function Footer() {
               { label: "LinkedIn", href: "https://www.linkedin.com/company/bolignorge/", external: true },
             ]}
           />
-          <FooterCol
-            title="Internt"
-            items={[
-              { label: "Styreportal", href: "/styreportal", lock: true },
-              { label: "Admin", href: "/admin", lock: true },
-            ]}
-          />
         </div>
 
         <div
@@ -231,7 +224,17 @@ function Footer() {
           }}
         >
           <span>© {new Date().getFullYear()} Bolig Norge AS</span>
-          <span>bolignorge.no</span>
+          <div className="flex items-center gap-4">
+            <span>bolignorge.no</span>
+            <Link
+              to="/logg-inn"
+              style={{ color: "inherit", textDecoration: "none" }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "")}
+            >
+              ·
+            </Link>
+          </div>
         </div>
       </div>
     </footer>
