@@ -999,25 +999,22 @@ function DashboardPage({ data, setData, totals }) {
         </div>
 
           {!editingMarket ? (
-            <div
-              className={
-                data.market.imageUrl
-                  ? "grid grid-cols-1 lg:grid-cols-2 gap-8"
-                  : ""
-              }
-            >
+            <div className="overflow-hidden">
+              {data.market.imageUrl && (
+                <div className="float-right ml-8 mb-4 w-full lg:w-1/2 max-w-[600px]">
+                  <MarketImageDisplay
+                    imageUrl={data.market.imageUrl}
+                    imageCaption={data.market.imageCaption}
+                  />
+                </div>
+              )}
               <div
                 className="text-[15px] leading-[1.7] whitespace-pre-line"
                 style={{ color: COL.inkSoft }}
               >
                 {data.market.outlook}
               </div>
-              {data.market.imageUrl && (
-                <MarketImageDisplay
-                  imageUrl={data.market.imageUrl}
-                  imageCaption={data.market.imageCaption}
-                />
-              )}
+              <div className="clear-both" />
             </div>
           ) : (
           <div className="space-y-4">
@@ -3015,6 +3012,70 @@ function ProjectEditModal({ project, onSave, onDelete, onClose }) {
             </Field>
           </div>
 
+          <Field label="Prosjektbilde">
+            {draft.imageUrl ? (
+              <div className="space-y-2">
+                <div
+                  className="border p-2 inline-block"
+                  style={{ borderColor: COL.border, background: COL.card }}
+                >
+                  <img
+                    src={draft.imageUrl}
+                    alt={draft.name}
+                    className="max-h-40 w-auto"
+                    style={{ display: "block" }}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <label
+                    htmlFor={`proj-img-${draft.id}`}
+                    className="cursor-pointer px-3 py-1.5 text-xs border"
+                    style={{ borderColor: COL.border, color: COL.inkSoft }}
+                  >
+                    Bytt bilde
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => update("imageUrl", "")}
+                    className="px-3 py-1.5 text-xs border"
+                    style={{ borderColor: COL.border, color: COL.inkSoft }}
+                  >
+                    Fjern bilde
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <label
+                htmlFor={`proj-img-${draft.id}`}
+                className="inline-block cursor-pointer px-3 py-2 text-xs border"
+                style={{
+                  borderColor: COL.border,
+                  color: COL.inkSoft,
+                  background: COL.card,
+                }}
+              >
+                Last opp bilde (JPG / PNG)
+              </label>
+            )}
+            <input
+              id={`proj-img-${draft.id}`}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 2 * 1024 * 1024) {
+                  alert("Bildet må være under 2 MB");
+                  return;
+                }
+                const reader = new FileReader();
+                reader.onload = () => update("imageUrl", reader.result);
+                reader.readAsDataURL(file);
+              }}
+            />
+          </Field>
+
           <Field label="Nettside">
             <Input
               value={draft.website}
@@ -4171,6 +4232,19 @@ function ProjectByProjectSection({ data, num }) {
               style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
             >
               <div>
+                {p.imageUrl && (
+                  <div
+                    className="mb-4 overflow-hidden"
+                    style={{ borderRadius: 2 }}
+                  >
+                    <img
+                      src={p.imageUrl}
+                      alt={p.name}
+                      className="w-full h-auto"
+                      style={{ display: "block", aspectRatio: "16 / 10", objectFit: "cover" }}
+                    />
+                  </div>
+                )}
                 <h4
                   className="text-xl mb-1"
                   style={{

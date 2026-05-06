@@ -597,45 +597,46 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
 
       {/* MAIN */}
       <main className="flex-1 min-w-0">
-        <header
-          className="flex items-center justify-between px-10 py-5 border-b"
-          style={{ borderColor: COL.border }}
-        >
-          <div>
-            <div
-              className="text-[11px] tracking-[0.18em] uppercase"
-              style={{ color: COL.muted }}
-            >
-              Månedsrapport · {data.meta.reportPeriod} {data.meta.reportYear}
+        {page !== "dashboard" && (
+          <header
+            className="flex items-center justify-between px-10 py-5 border-b print:hidden"
+            style={{ borderColor: COL.border }}
+          >
+            <div>
+              <div
+                className="text-[11px] tracking-[0.18em] uppercase"
+                style={{ color: COL.muted }}
+              >
+                Månedsrapport · {data.meta.reportPeriod} {data.meta.reportYear}
+              </div>
+              <h1
+                className="text-2xl mt-0.5"
+                style={{
+                  fontFamily: "'Fraunces', serif",
+                  fontWeight: 500,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {NAV.find((n) => n.id === page)?.label}
+              </h1>
             </div>
-            <h1
-              className="text-2xl mt-0.5"
-              style={{
-                fontFamily: "'Fraunces', serif",
-                fontWeight: 500,
-                letterSpacing: "-0.01em",
-              }}
-            >
-              {NAV.find((n) => n.id === page)?.label}
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <span
-              className="text-xs"
-              style={{
-                color: COL.muted,
-                fontFamily: "'JetBrains Mono', monospace",
-              }}
-            >
-              {new Date(data.meta.reportDate).toLocaleDateString("nb-NO", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric",
-              })}
-            </span>
-          </div>
-        </header>
-
+            <div className="flex items-center gap-3">
+              <span
+                className="text-xs"
+                style={{
+                  color: COL.muted,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              >
+                {new Date(data.meta.reportDate).toLocaleDateString("nb-NO", {
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </span>
+            </div>
+          </header>
+        )}
         <div className="px-10 py-8">
           {page === "dashboard" && (
             <DashboardPage data={data} totals={totals} />
@@ -777,32 +778,49 @@ function DashboardPage({ data, totals }) {
             <BNLogo light />
           </div>
         </div>
-        <div className="mt-16">
-          <div
-            className="text-[11px] tracking-[0.3em] uppercase mb-3"
-            style={{ opacity: 0.7, color: COL.goldSoft }}
-          >
-            Månedsrapport
+        <div className="mt-16 flex items-end justify-between gap-6">
+          <div>
+            <div
+              className="text-[11px] tracking-[0.3em] uppercase mb-3"
+              style={{ opacity: 0.7, color: COL.goldSoft }}
+            >
+              Månedsrapport
+            </div>
+            <h1
+              className="text-6xl mb-2"
+              style={{
+                fontFamily: "'Fraunces', serif",
+                fontWeight: 400,
+                letterSpacing: "-0.02em",
+                lineHeight: 1.1,
+              }}
+            >
+              {data.meta?.reportPeriod}
+            </h1>
+            <div
+              className="text-2xl"
+              style={{
+                fontFamily: "'Fraunces', serif",
+                fontWeight: 300,
+                opacity: 0.8,
+              }}
+            >
+              {data.meta?.companyName} · {data.meta?.reportYear}
+            </div>
           </div>
-          <h1
-            className="text-6xl mb-2"
-            style={{
-              fontFamily: "'Fraunces', serif",
-              fontWeight: 400,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            {data.meta?.reportPeriod}
-          </h1>
           <div
-            className="text-2xl"
+            className="text-xs pb-2"
             style={{
-              fontFamily: "'Fraunces', serif",
-              fontWeight: 300,
-              opacity: 0.8,
+              opacity: 0.6,
+              fontFamily: "'JetBrains Mono', monospace",
             }}
           >
-            {data.meta?.companyName} · {data.meta?.reportYear}
+            {data.meta?.reportDate &&
+              new Date(data.meta.reportDate).toLocaleDateString("nb-NO", {
+                day: "2-digit",
+                month: "long",
+                year: "numeric",
+              })}
           </div>
         </div>
       </div>
@@ -816,31 +834,24 @@ function DashboardPage({ data, totals }) {
         >
           <KPICard
             label="Total porteføljeverdi"
-            value={fmtMrd(totals.totalOmsetning)}
+            value={fmtMrd(totals.omsetning)}
             accent
           />
           <KPICard
             label="Dekningsbidrag"
-            value={fmtMrd(totals.totalDB)}
+            value={fmtMrd(totals.db)}
           />
           <KPICard
             label="DB-margin"
             value={
-              totals.totalOmsetning > 0
-                ? ((totals.totalDB / totals.totalOmsetning) * 100)
-                    .toFixed(1)
-                    .replace(".", ",") + " %"
+              totals.margin > 0
+                ? totals.margin.toFixed(1).replace(".", ",") + " %"
                 : "—"
             }
           />
           <KPICard
             label="Boliger u. utvikling"
-            value={
-              (data.projects || []).reduce(
-                (s, p) => s + (Number(p.units) || 0),
-                0
-              ) + "+"
-            }
+            value={(totals.units || 0) + "+"}
           />
         </div>
         <div
@@ -874,25 +885,22 @@ function DashboardPage({ data, totals }) {
             Marked & outlook
           </h2>
         </div>
-        <div
-          className={
-            data.market?.imageUrl
-              ? "grid grid-cols-1 lg:grid-cols-2 gap-8"
-              : ""
-          }
-        >
+        <div className="overflow-hidden">
+          {data.market?.imageUrl && (
+            <div className="float-right ml-8 mb-4 w-full lg:w-1/2 max-w-[600px]">
+              <ShareImageDisplay
+                imageUrl={data.market.imageUrl}
+                imageCaption={data.market.imageCaption}
+              />
+            </div>
+          )}
           <div
             className="text-[15px] leading-[1.7] whitespace-pre-line"
             style={{ color: COL.inkSoft }}
           >
             {data.market.outlook}
           </div>
-          {data.market?.imageUrl && (
-            <ShareImageDisplay
-              imageUrl={data.market.imageUrl}
-              imageCaption={data.market.imageCaption}
-            />
-          )}
+          <div className="clear-both" />
         </div>
       </section>
 
@@ -1169,6 +1177,19 @@ function ProjectByProjectSection({ data, num }) {
               style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
             >
               <div>
+                {p.imageUrl && (
+                  <div
+                    className="mb-4 overflow-hidden"
+                    style={{ borderRadius: 2 }}
+                  >
+                    <img
+                      src={p.imageUrl}
+                      alt={p.name}
+                      className="w-full h-auto"
+                      style={{ display: "block", aspectRatio: "16 / 10", objectFit: "cover" }}
+                    />
+                  </div>
+                )}
                 <h4
                   className="text-xl mb-1"
                   style={{
