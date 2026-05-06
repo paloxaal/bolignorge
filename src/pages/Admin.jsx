@@ -999,13 +999,7 @@ function DashboardPage({ data, setData, totals }) {
         </div>
 
           {!editingMarket ? (
-            <div
-              className={
-                data.market.imageUrl
-                  ? "grid grid-cols-1 lg:grid-cols-2 gap-8"
-                  : ""
-              }
-            >
+            <div className="space-y-8">
               <div
                 className="text-[15px] leading-[1.7] whitespace-pre-line"
                 style={{ color: COL.inkSoft }}
@@ -3412,16 +3406,10 @@ function ReportPage({ data, totals }) {
           {/* Marked & outlook */}
           <section>
             <SectionHeader num="02" title="Marked & outlook" />
-            <div
-              className={
-                data.market.imageUrl
-                  ? "mt-4 grid grid-cols-1 lg:grid-cols-2 gap-8"
-                  : "mt-4"
-              }
-            >
+            <div className="mt-4 space-y-6">
               <div
                 className="text-[14px] leading-[1.7] whitespace-pre-line"
-                style={{ color: COL.inkSoft, maxWidth: "65ch" }}
+                style={{ color: COL.inkSoft }}
               >
                 {data.market.outlook}
               </div>
@@ -3433,7 +3421,7 @@ function ReportPage({ data, totals }) {
                     className="w-full h-auto"
                     style={{
                       border: `1px solid ${COL.border}`,
-                      maxHeight: 400,
+                      maxHeight: 500,
                       objectFit: "contain",
                     }}
                   />
