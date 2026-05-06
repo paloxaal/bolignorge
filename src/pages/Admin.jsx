@@ -886,16 +886,31 @@ function DashboardPage({ data, setData, totals }) {
     e.target.value = ""; // reset så samme fil kan velges igjen
   };
 
-  const saveMarket = () => {
-    setData((d) => ({
-      ...d,
+  const [saveError, setSaveError] = useState(null);
+  const [savingMarket, setSavingMarket] = useState(false);
+
+  const saveMarket = async () => {
+    setSavingMarket(true);
+    setSaveError(null);
+    const newData = {
+      ...data,
       market: {
-        ...d.market,
+        ...data.market,
         outlook: marketDraft,
         imageUrl: imageUrlDraft,
         imageCaption: imageCaptionDraft,
       },
-    }));
+    };
+    // Skriv direkte til Supabase nå (ikke vent på den debounced auto-saven)
+    const ok = await storage.set(STORAGE_KEY, JSON.stringify(newData));
+    setSavingMarket(false);
+    if (!ok) {
+      setSaveError(
+        "Klarte ikke lagre. Sjekk konsollen (F12) for detaljer og prøv igjen."
+      );
+      return;
+    }
+    setData(newData);
     setEditingMarket(false);
   };
 
@@ -935,56 +950,67 @@ function DashboardPage({ data, setData, totals }) {
               Rediger
             </button>
           ) : (
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              {saveError && (
+                <span className="text-[11px] mr-2" style={{ color: COL.burgundy || "#8B2E3A" }}>
+                  {saveError}
+                </span>
+              )}
               <button
-                onClick={() => setEditingMarket(false)}
+                onClick={() => {
+                  setSaveError(null);
+                  setEditingMarket(false);
+                }}
+                disabled={savingMarket}
                 className="px-3 py-1.5 text-xs border"
-                style={{ borderColor: COL.border, color: COL.inkSoft }}
+                style={{
+                  borderColor: COL.border,
+                  color: COL.inkSoft,
+                  opacity: savingMarket ? 0.5 : 1,
+                }}
               >
                 Avbryt
               </button>
               <button
                 onClick={saveMarket}
-                className="px-3 py-1.5 text-xs"
-                style={{ background: COL.ink, color: COL.paper }}
+                disabled={savingMarket}
+                className="px-3 py-1.5 text-xs flex items-center gap-1.5"
+                style={{
+                  background: COL.ink,
+                  color: COL.paper,
+                  opacity: savingMarket ? 0.6 : 1,
+                  cursor: savingMarket ? "wait" : "pointer",
+                }}
               >
-                Lagre
+                {savingMarket && <Loader2 size={11} className="animate-spin" />}
+                {savingMarket ? "Lagrer …" : "Lagre"}
               </button>
             </div>
           )}
         </div>
 
-        {!editingMarket ? (
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+          {!editingMarket ? (
             <div
-              className="md:col-span-3 text-[15px] leading-[1.7] whitespace-pre-line"
-              style={{ color: COL.inkSoft }}
+              className={
+                data.market.imageUrl
+                  ? "grid grid-cols-1 lg:grid-cols-2 gap-8"
+                  : ""
+              }
             >
-              {data.market.outlook}
-            </div>
-            {data.market.imageUrl ? (
-              <div className="md:col-span-2">
-                <img
-                  src={data.market.imageUrl}
-                  alt={data.market.imageCaption || "Markedsstatistikk"}
-                  className="w-full h-auto"
-                  style={{ border: `1px solid ${COL.border}` }}
-                />
-                {data.market.imageCaption && (
-                  <div
-                    className="mt-2 text-[11px]"
-                    style={{
-                      color: COL.muted,
-                      fontFamily: "'JetBrains Mono', monospace",
-                    }}
-                  >
-                    {data.market.imageCaption}
-                  </div>
-                )}
+              <div
+                className="text-[15px] leading-[1.7] whitespace-pre-line"
+                style={{ color: COL.inkSoft }}
+              >
+                {data.market.outlook}
               </div>
-            ) : null}
-          </div>
-        ) : (
+              {data.market.imageUrl && (
+                <MarketImageDisplay
+                  imageUrl={data.market.imageUrl}
+                  imageCaption={data.market.imageCaption}
+                />
+              )}
+            </div>
+          ) : (
           <div className="space-y-4">
             <div>
               <label
@@ -1961,6 +1987,92 @@ function CaseEditModal({ caseData, onSave, onDelete, onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------- MARKET IMAGE DISPLAY (klikk-for-å-forstørre) ----------------
+function MarketImageDisplay({ imageUrl, imageCaption, compact = false }) {
+  const [enlarged, setEnlarged] = useState(false);
+  if (!imageUrl) return null;
+  return (
+    <>
+      <div className={compact ? "" : "w-full"}>
+        <button
+          type="button"
+          onClick={() => setEnlarged(true)}
+          className="block w-full p-0 cursor-zoom-in"
+          style={{ background: "none", border: "none" }}
+          aria-label="Forstørr bilde"
+        >
+          <img
+            src={imageUrl}
+            alt={imageCaption || "Markedsstatistikk"}
+            className="w-full h-auto block"
+            style={{
+              border: `1px solid ${COL.border}`,
+              maxHeight: compact ? 300 : 500,
+              objectFit: "contain",
+            }}
+          />
+        </button>
+        {imageCaption && (
+          <div
+            className="mt-2 text-[11px]"
+            style={{
+              color: COL.muted,
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+          >
+            {imageCaption}
+          </div>
+        )}
+      </div>
+
+      {enlarged && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 cursor-zoom-out"
+          style={{ background: "rgba(14, 26, 43, 0.92)" }}
+          onClick={() => setEnlarged(false)}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEnlarged(false);
+            }}
+            className="absolute top-6 right-6 p-2"
+            style={{
+              background: "none",
+              border: `1px solid rgba(246, 241, 231, 0.3)`,
+              color: COL.paper,
+              cursor: "pointer",
+            }}
+            aria-label="Lukk"
+          >
+            <X size={20} />
+          </button>
+          <img
+            src={imageUrl}
+            alt={imageCaption || "Markedsstatistikk"}
+            className="max-w-full max-h-full"
+            style={{ objectFit: "contain" }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          {imageCaption && (
+            <div
+              className="absolute bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 text-[12px]"
+              style={{
+                color: COL.paper,
+                background: "rgba(0,0,0,0.5)",
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            >
+              {imageCaption}
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -3239,10 +3351,43 @@ function ReportPage({ data, totals }) {
           <section>
             <SectionHeader num="02" title="Marked & outlook" />
             <div
-              className="mt-4 text-[14px] leading-[1.7] whitespace-pre-line"
-              style={{ color: COL.inkSoft, columnCount: 1, maxWidth: "65ch" }}
+              className={
+                data.market.imageUrl
+                  ? "mt-4 grid grid-cols-1 lg:grid-cols-2 gap-8"
+                  : "mt-4"
+              }
             >
-              {data.market.outlook}
+              <div
+                className="text-[14px] leading-[1.7] whitespace-pre-line"
+                style={{ color: COL.inkSoft, maxWidth: "65ch" }}
+              >
+                {data.market.outlook}
+              </div>
+              {data.market.imageUrl && (
+                <div>
+                  <img
+                    src={data.market.imageUrl}
+                    alt={data.market.imageCaption || "Markedsstatistikk"}
+                    className="w-full h-auto"
+                    style={{
+                      border: `1px solid ${COL.border}`,
+                      maxHeight: 400,
+                      objectFit: "contain",
+                    }}
+                  />
+                  {data.market.imageCaption && (
+                    <div
+                      className="mt-2 text-[11px]"
+                      style={{
+                        color: COL.muted,
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}
+                    >
+                      {data.market.imageCaption}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 

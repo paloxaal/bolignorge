@@ -780,31 +780,25 @@ function DashboardPage({ data, totals }) {
             Marked & outlook
           </h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+        <div
+          className={
+            data.market?.imageUrl
+              ? "grid grid-cols-1 lg:grid-cols-2 gap-8"
+              : ""
+          }
+        >
           <div
-            className="md:col-span-3 text-[15px] leading-[1.7] whitespace-pre-line"
+            className="text-[15px] leading-[1.7] whitespace-pre-line"
             style={{ color: COL.inkSoft }}
           >
             {data.market.outlook}
           </div>
-          {data.market?.imageUrl ? (
-            <div className="md:col-span-2">
-              <img
-                src={data.market.imageUrl}
-                alt={data.market.imageCaption || "Markedsstatistikk"}
-                className="w-full h-auto"
-                style={{ border: `1px solid ${COL.border}` }}
-              />
-              {data.market.imageCaption && (
-                <div
-                  className="mt-2 text-[11px]"
-                  style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
-                >
-                  {data.market.imageCaption}
-                </div>
-              )}
-            </div>
-          ) : null}
+          {data.market?.imageUrl && (
+            <ShareImageDisplay
+              imageUrl={data.market.imageUrl}
+              imageCaption={data.market.imageCaption}
+            />
+          )}
         </div>
       </section>
 
@@ -936,6 +930,92 @@ function DashboardPage({ data, totals }) {
         <CapitalSummary financials={data.financials || []} />
       </section>
     </div>
+  );
+}
+
+// ---------------- IMAGE DISPLAY (klikk-for-å-forstørre) ----------------
+function ShareImageDisplay({ imageUrl, imageCaption }) {
+  const [enlarged, setEnlarged] = useState(false);
+  if (!imageUrl) return null;
+  return (
+    <>
+      <div className="w-full">
+        <button
+          type="button"
+          onClick={() => setEnlarged(true)}
+          className="block w-full p-0 cursor-zoom-in"
+          style={{ background: "none", border: "none" }}
+          aria-label="Forstørr bilde"
+        >
+          <img
+            src={imageUrl}
+            alt={imageCaption || "Markedsstatistikk"}
+            className="w-full h-auto block"
+            style={{
+              border: `1px solid ${COL.border}`,
+              maxHeight: 500,
+              objectFit: "contain",
+            }}
+          />
+        </button>
+        {imageCaption && (
+          <div
+            className="mt-2 text-[11px]"
+            style={{
+              color: COL.muted,
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+          >
+            {imageCaption}
+          </div>
+        )}
+      </div>
+
+      {enlarged && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 cursor-zoom-out"
+          style={{ background: "rgba(14, 26, 43, 0.92)" }}
+          onClick={() => setEnlarged(false)}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEnlarged(false);
+            }}
+            className="absolute top-6 right-6 p-2"
+            style={{
+              background: "none",
+              border: `1px solid rgba(246, 241, 231, 0.3)`,
+              color: COL.paper,
+              cursor: "pointer",
+            }}
+            aria-label="Lukk"
+          >
+            <X size={20} />
+          </button>
+          <img
+            src={imageUrl}
+            alt={imageCaption || "Markedsstatistikk"}
+            className="max-w-full max-h-full"
+            style={{ objectFit: "contain" }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          {imageCaption && (
+            <div
+              className="absolute bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 text-[12px]"
+              style={{
+                color: COL.paper,
+                background: "rgba(0,0,0,0.5)",
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            >
+              {imageCaption}
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
