@@ -985,21 +985,21 @@ function DashboardPage({ data, totals }) {
     <div className="space-y-10">
       {/* Cover hero — match admin Rapport */}
       <div
-        className="cover-hero -mx-10 -mt-8 px-16 py-16"
-        style={{ background: COL.ink, color: COL.paper, minHeight: "260px" }}
+        className="cover-hero -mx-4 -mt-6 px-6 py-10 md:-mx-10 md:-mt-8 md:px-16 md:py-16"
+        style={{ background: COL.ink, color: COL.paper }}
       >
-        <div className="flex justify-between items-start">
+        <div className="flex justify-between items-start gap-4">
           <div
             className="text-[10px] tracking-[0.25em] uppercase"
             style={{ opacity: 0.6 }}
           >
             Konfidensielt — kun for interne formål
           </div>
-          <div>
-            <BNLogo light height={36} />
+          <div className="flex-shrink-0">
+            <BNLogo light height={28} className="md:h-9" />
           </div>
         </div>
-        <div className="mt-16 flex items-end justify-between gap-6">
+        <div className="mt-10 md:mt-16 flex flex-col md:flex-row md:items-end md:justify-between gap-4 md:gap-6">
           <div>
             <div
               className="text-[11px] tracking-[0.3em] uppercase mb-3"
@@ -1008,7 +1008,7 @@ function DashboardPage({ data, totals }) {
               Månedsrapport
             </div>
             <h1
-              className="text-6xl mb-2"
+              className="text-4xl md:text-6xl mb-2"
               style={{
                 fontFamily: "'Playfair Display', serif",
                 fontWeight: 400,
@@ -1019,7 +1019,7 @@ function DashboardPage({ data, totals }) {
               {data.meta?.reportPeriod}
             </h1>
             <div
-              className="text-2xl"
+              className="text-lg md:text-2xl"
               style={{
                 fontFamily: "'Playfair Display', serif",
                 fontWeight: 300,
@@ -1030,7 +1030,7 @@ function DashboardPage({ data, totals }) {
             </div>
           </div>
           <div
-            className="text-xs pb-2"
+            className="text-xs md:pb-2 whitespace-nowrap"
             style={{
               opacity: 0.6,
               fontFamily: "'JetBrains Mono', monospace",
@@ -1050,7 +1050,7 @@ function DashboardPage({ data, totals }) {
       <section>
         <SectionHeader num="01" title="Nøkkeltall" />
         <div
-          className="mt-6 grid grid-cols-4 gap-px"
+          className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-px"
           style={{ background: COL.border }}
         >
           <KPICard
@@ -1150,7 +1150,7 @@ function DashboardPage({ data, totals }) {
             Prosjektstatus
           </h2>
         </div>
-        <div className="grid grid-cols-4 gap-px" style={{ background: COL.border }}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: COL.border }}>
           <KPICard
             label="Total porteføljeverdi"
             value={fmtMrd(totals.omsetning)}
@@ -1351,15 +1351,15 @@ function ShareImageDisplay({ imageUrl, imageCaption }) {
 // ---------------- KPI CARD ----------------
 function KPICard({ label, value, accent, sub }) {
   return (
-    <div className="px-7 py-7" style={{ background: COL.card }}>
+    <div className="px-4 py-5 md:px-7 md:py-7" style={{ background: COL.card }}>
       <div
-        className="text-[10px] tracking-[0.2em] uppercase mb-3"
+        className="text-[10px] tracking-[0.18em] uppercase mb-3"
         style={{ color: COL.muted }}
       >
         {label}
       </div>
       <div
-        className="text-[34px] leading-none"
+        className="text-2xl md:text-[34px] leading-none"
         style={{
           fontFamily: "'Playfair Display', serif",
           fontWeight: 500,
@@ -1749,7 +1749,7 @@ function IRRSection({ financials, totals }) {
         </div>
       </div>
       <div
-        className="grid grid-cols-4 gap-px px-6 py-5"
+        className="grid grid-cols-2 md:grid-cols-4 gap-px px-6 py-5"
         style={{ background: COL.borderSoft }}
       >
         <div className="px-4 py-3" style={{ background: COL.card }}>
@@ -3190,7 +3190,7 @@ function FinancialsPage({ data, totals }) {
   return (
     <div className="space-y-10">
       {/* KPI-kort */}
-      <div className="grid grid-cols-4 gap-px" style={{ background: COL.border }}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: COL.border }}>
         <KPICard
           label={`Årsresultat ${latest?.year}${projTag}`}
           value={

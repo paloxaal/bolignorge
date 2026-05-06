@@ -1271,7 +1271,7 @@ function DashboardPage({ data, setData, totals }) {
             Prosjektstatus
           </h2>
         </div>
-        <div className="grid grid-cols-4 gap-px" style={{ background: COL.border }}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: COL.border }}>
           <KPICard
             label="Total porteføljeverdi"
             value={fmtMrd(totals.omsetningJustert)}
@@ -1602,7 +1602,7 @@ function IRRSection({ financials, totals }) {
 
       {/* KPI-linje */}
       <div
-        className="grid grid-cols-4 gap-px px-6 py-5"
+        className="grid grid-cols-2 md:grid-cols-4 gap-px px-6 py-5"
         style={{ background: COL.borderSoft }}
       >
         <div className="px-4 py-3" style={{ background: COL.card }}>
@@ -2571,15 +2571,15 @@ function MarketImageDisplay({ imageUrl, imageCaption, compact = false }) {
 // ---------------- KPI CARD ----------------
 function KPICard({ label, value, accent, sub }) {
   return (
-    <div className="px-7 py-7" style={{ background: COL.card }}>
+    <div className="px-4 py-5 md:px-7 md:py-7" style={{ background: COL.card }}>
       <div
-        className="text-[10px] tracking-[0.2em] uppercase mb-3"
+        className="text-[10px] tracking-[0.18em] uppercase mb-3"
         style={{ color: COL.muted }}
       >
         {label}
       </div>
       <div
-        className="text-[34px] leading-none"
+        className="text-2xl md:text-[34px] leading-none"
         style={{
           fontFamily: "'Playfair Display', serif",
           fontWeight: 500,
@@ -3397,7 +3397,7 @@ function FinancialsPage({ data, setData, totals }) {
   return (
     <div className="space-y-10">
       {/* Hero */}
-      <div className="grid grid-cols-4 gap-px" style={{ background: COL.border }}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: COL.border }}>
         <KPICard
           label={`Årsresultat ${latest?.year}${projTag}`}
           value={
@@ -4556,7 +4556,7 @@ function ReportPage({ data, totals }) {
           {/* Nøkkeltall */}
           <section>
             <SectionHeader num="01" title="Nøkkeltall" />
-            <div className="grid grid-cols-4 gap-px mt-6" style={{ background: COL.border }}>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-px mt-6" style={{ background: COL.border }}>
               <ReportKPI
                 label="Total porteføljeverdi"
                 value={fmtMrd(totals.omsetningJustert)}
@@ -4783,7 +4783,7 @@ function ReportPage({ data, totals }) {
           {/* Verdijustert egenkapital */}
           <section>
             <SectionHeader num="06" title="Verdijustert egenkapital" />
-            <div className="mt-4 grid grid-cols-3 gap-px" style={{ background: COL.border }}>
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-px" style={{ background: COL.border }}>
               <ReportKPI label="Bokført EK" value={fmtNOK(totals.bokfortEK) + " m"} />
               <ReportKPI label="Merverdier eiendom" value={fmtNOK(totals.merverdier) + " m"} />
               <ReportKPI label="NAV" value={fmtNOK(totals.nav) + " m"} />
