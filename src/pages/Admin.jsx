@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../lib/supabase";
 import {
   LayoutDashboard,
   Building2,
@@ -378,15 +379,33 @@ const SEED = {
 
 const STORAGE_KEY = "bn_dashboard_v1";
 const storage = {
-  get: async (key) => {
-    try {
-      const value = localStorage.getItem(key);
-      return value !== null ? { value } : null;
-    } catch { return null; }
+  get: async () => {
+    const { data, error } = await supabase
+      .from("dashboard_state")
+      .select("data")
+      .eq("id", "main")
+      .maybeSingle();
+    if (error) {
+      console.error("[dashboard] load error:", error.message);
+      return null;
+    }
+    if (!data) return null;
+    return { value: JSON.stringify(data.data) };
   },
-  set: async (key, value) => {
-    try { localStorage.setItem(key, value); return true; }
-    catch { return false; }
+  set: async (_key, value) => {
+    const { data: userData } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from("dashboard_state")
+      .upsert({
+        id: "main",
+        data: JSON.parse(value),
+        updated_by: userData?.user?.id ?? null,
+      });
+    if (error) {
+      console.error("[dashboard] save error:", error.message);
+      return false;
+    }
+    return true;
   },
 };
 const STATUS_CATEGORIES = [

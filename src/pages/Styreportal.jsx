@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../lib/supabase";
 import {
   LayoutDashboard,
   Building2,
@@ -12,6 +13,8 @@ import {
   RefreshCw,
   ShieldCheck,
   LogOut,
+  Download,
+  FileText,
 } from "lucide-react";
 import {
   BarChart,
@@ -47,15 +50,33 @@ const COL = {
 // admin writes, board reads via "published" snapshot
 const STORAGE_KEY = "bn_dashboard_v1";
 const storage = {
-  get: async (key) => {
-    try {
-      const value = localStorage.getItem(key);
-      return value !== null ? { value } : null;
-    } catch { return null; }
+  get: async () => {
+    const { data, error } = await supabase
+      .from("dashboard_state")
+      .select("data")
+      .eq("id", "main")
+      .maybeSingle();
+    if (error) {
+      console.error("[dashboard] load error:", error.message);
+      return null;
+    }
+    if (!data) return null;
+    return { value: JSON.stringify(data.data) };
   },
-  set: async (key, value) => {
-    try { localStorage.setItem(key, value); return true; }
-    catch { return false; }
+  set: async (_key, value) => {
+    const { data: userData } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from("dashboard_state")
+      .upsert({
+        id: "main",
+        data: JSON.parse(value),
+        updated_by: userData?.user?.id ?? null,
+      });
+    if (error) {
+      console.error("[dashboard] save error:", error.message);
+      return false;
+    }
+    return true;
   },
 };
 
@@ -474,6 +495,20 @@ function StyreportalCore() {
       <FontImports />
       <div style={{ position: "fixed", top: 0, right: 0, zIndex: 100, padding: "12px 20px", background: COL.paper, borderBottom: `1px solid ${COL.border}`, borderLeft: `1px solid ${COL.border}`, borderBottomLeftRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, display: "flex", alignItems: "center", gap: 16 }}>
         <span style={{ color: COL.muted }}>{profile?.full_name || profile?.email}</span>
+        <button onClick={() => {
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `bolig-norge-styreportal-${new Date().toISOString().split("T")[0]}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }} style={{ display: "flex", alignItems: "center", gap: 6, color: COL.ink, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
+          <Download size={12} /> JSON
+        </button>
+        <button onClick={() => window.print()} style={{ display: "flex", alignItems: "center", gap: 6, color: COL.ink, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
+          <FileText size={12} /> PDF
+        </button>
         <button onClick={signOut} style={{ display: "flex", alignItems: "center", gap: 6, color: COL.ink, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
           <LogOut size={12} /> LOGG UT
         </button>
