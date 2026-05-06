@@ -448,50 +448,10 @@ const fmtPct = (n) => {
 };
 
 // ---------------- ROOT APP ----------------
-function StyreportalCore() {
-  const { profile, signOut } = useAuth();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, lastSync, onReload }) {
   const [page, setPage] = useState("dashboard");
   const [viewingProject, setViewingProject] = useState(null);
   const [viewingCase, setViewingCase] = useState(null);
-  const [lastSync, setLastSync] = useState(null);
-
-  const loadData = async () => {
-    try {
-      const r = await storage.get(STORAGE_KEY);
-      if (r && r.value) {
-        const loaded = JSON.parse(r.value);
-        setData({
-          ...FALLBACK_SEED,
-          ...loaded,
-          pipeline: loaded.pipeline ?? FALLBACK_SEED.pipeline,
-        });
-      } else {
-        setData(FALLBACK_SEED);
-      }
-      setLastSync(new Date());
-    } catch {
-      setData(FALLBACK_SEED);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  if (loading || !data) {
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ background: COL.paper, color: COL.ink }}
-      >
-        <Loader2 className="animate-spin" />
-      </div>
-    );
-  }
 
   const totals = computeTotals(data);
 
@@ -513,7 +473,13 @@ function StyreportalCore() {
     >
       <FontImports />
       <div style={{ position: "fixed", top: 0, right: 0, zIndex: 100, padding: "12px 20px", background: COL.paper, borderBottom: `1px solid ${COL.border}`, borderLeft: `1px solid ${COL.border}`, borderBottomLeftRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, display: "flex", alignItems: "center", gap: 16 }}>
-        <span style={{ color: COL.muted }}>{profile?.full_name || profile?.email}</span>
+        {mode === "share" ? (
+          <span style={{ color: COL.gold }}>
+            FROSSET KOPI{expiresAt ? ` · GYLDIG TIL ${new Date(expiresAt).toLocaleDateString("nb-NO", { day: "numeric", month: "short" })}` : ""}
+          </span>
+        ) : (
+          <span style={{ color: COL.muted }}>{profile?.full_name || profile?.email}</span>
+        )}
         <button onClick={() => {
           const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
           const url = URL.createObjectURL(blob);
@@ -528,9 +494,15 @@ function StyreportalCore() {
         <button onClick={() => window.print()} style={{ display: "flex", alignItems: "center", gap: 6, color: COL.ink, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
           <FileText size={12} /> PDF
         </button>
-        <button onClick={signOut} style={{ display: "flex", alignItems: "center", gap: 6, color: COL.ink, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
-          <LogOut size={12} /> LOGG UT
-        </button>
+        {mode === "share" ? (
+          <a href="/logg-inn" style={{ display: "flex", alignItems: "center", gap: 6, color: COL.ink, textDecoration: "none" }}>
+            <ShieldCheck size={12} /> LOGG INN
+          </a>
+        ) : (
+          <button onClick={signOut} style={{ display: "flex", alignItems: "center", gap: 6, color: COL.ink, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
+            <LogOut size={12} /> LOGG UT
+          </button>
+        )}
       </div>
 
       {/* SIDEBAR */}
@@ -592,22 +564,34 @@ function StyreportalCore() {
           <div className="flex items-center gap-2 mb-1">
             <span>{data.meta.companyName}</span>
           </div>
-          <button
-            onClick={loadData}
-            className="flex items-center gap-1.5 text-[10px] hover:opacity-100 opacity-70 transition-opacity"
-            style={{ color: COL.muted }}
-          >
-            <RefreshCw size={9} />
-            <span>
-              Sist synkronisert{" "}
-              {lastSync
-                ? lastSync.toLocaleTimeString("nb-NO", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "—"}
-            </span>
-          </button>
+          {mode === "share" ? (
+            <div
+              className="flex items-center gap-1.5 text-[10px]"
+              style={{ color: COL.gold }}
+            >
+              <ShieldCheck size={9} />
+              <span>
+                Frosset kopi{lastSync ? ` · ${new Date(lastSync).toLocaleDateString("nb-NO", { day: "numeric", month: "short" })}` : ""}
+              </span>
+            </div>
+          ) : (
+            <button
+              onClick={onReload}
+              className="flex items-center gap-1.5 text-[10px] hover:opacity-100 opacity-70 transition-opacity"
+              style={{ color: COL.muted }}
+            >
+              <RefreshCw size={9} />
+              <span>
+                Sist synkronisert{" "}
+                {lastSync
+                  ? lastSync.toLocaleTimeString("nb-NO", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : "—"}
+              </span>
+            </button>
+          )}
         </div>
       </aside>
 
@@ -2269,9 +2253,41 @@ function ReadCell({ value, muted }) {
   );
 }
 
+// ---------------- AUTH WRAPPER (default export) ----------------
 export default function Styreportal() {
-  const { profile, loading } = useAuth();
-  if (loading) return null;
+  const { profile, signOut, loading: authLoading } = useAuth();
+  const [data, setData] = useState(null);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [lastSync, setLastSync] = useState(null);
+
+  const loadData = async () => {
+    setDataLoading(true);
+    try {
+      const r = await storage.get(STORAGE_KEY);
+      if (r && r.value) {
+        const loaded = JSON.parse(r.value);
+        setData({
+          ...FALLBACK_SEED,
+          ...loaded,
+          pipeline: loaded.pipeline ?? FALLBACK_SEED.pipeline,
+        });
+      } else {
+        setData(FALLBACK_SEED);
+      }
+      setLastSync(new Date());
+    } catch {
+      setData(FALLBACK_SEED);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  if (authLoading) return null;
+
   if (profile?.role !== "board" && profile?.role !== "admin") {
     return (
       <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'JetBrains Mono', monospace", color: "#0E1A2B" }}>
@@ -2279,5 +2295,150 @@ export default function Styreportal() {
       </div>
     );
   }
-  return <StyreportalCore />;
+
+  if (dataLoading || !data) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: COL.paper, color: COL.ink }}>
+        <Loader2 className="animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <StyreportalCore
+      data={data}
+      mode="auth"
+      profile={profile}
+      signOut={signOut}
+      lastSync={lastSync}
+      onReload={loadData}
+    />
+  );
+}
+
+// ---------------- SHARE WRAPPER (named export, public route) ----------------
+// Brukes av /styreportal/share/:token. Henter snapshot fra share_tokens-tabell,
+// renderer samme UI som auth-mode men uten signOut/refresh.
+export function StyreportalShare({ token }) {
+  const [snapshot, setSnapshot] = useState(null);
+  const [expiresAt, setExpiresAt] = useState(null);
+  const [createdAt, setCreatedAt] = useState(null);
+  const [status, setStatus] = useState("loading"); // loading | ok | expired | error
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!token) {
+        if (alive) setStatus("expired");
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from("share_tokens")
+          .select("snapshot, expires_at, created_at")
+          .eq("token", token)
+          .maybeSingle();
+        if (!alive) return;
+        if (error) {
+          console.error("[share] fetch error:", error.message);
+          setStatus("error");
+          return;
+        }
+        if (!data) {
+          // Ingen rad funnet — enten ugyldig token eller utløpt (RLS filtrerer ut utløpte)
+          setStatus("expired");
+          return;
+        }
+        setSnapshot(data.snapshot);
+        setExpiresAt(data.expires_at);
+        setCreatedAt(data.created_at);
+        setStatus("ok");
+      } catch (e) {
+        console.error("[share] failed:", e.message);
+        if (alive) setStatus("error");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [token]);
+
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: COL.paper, color: COL.ink }}>
+        <Loader2 className="animate-spin" />
+      </div>
+    );
+  }
+
+  if (status === "expired" || status === "error" || !snapshot) {
+    return <ExpiredSharePage status={status} />;
+  }
+
+  return (
+    <StyreportalCore
+      data={snapshot}
+      mode="share"
+      expiresAt={expiresAt}
+      lastSync={createdAt ? new Date(createdAt) : null}
+    />
+  );
+}
+
+function ExpiredSharePage({ status }) {
+  const isError = status === "error";
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center px-6"
+      style={{ background: COL.paper, color: COL.ink, fontFamily: "'Manrope', system-ui, sans-serif" }}
+    >
+      <FontImports />
+      <div className="max-w-md text-center">
+        <div
+          className="text-[10px] tracking-[0.25em] uppercase mb-3"
+          style={{ color: COL.gold, fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          {isError ? "Noe gikk galt" : "Lenken er utløpt"}
+        </div>
+        <h1
+          className="mb-4"
+          style={{
+            fontFamily: "'Fraunces', serif",
+            fontWeight: 500,
+            fontSize: "clamp(24px, 3vw, 32px)",
+            letterSpacing: "-0.02em",
+            lineHeight: 1.2,
+          }}
+        >
+          {isError
+            ? "Klarte ikke laste rapporten"
+            : "Delingslenken er ikke lenger aktiv"}
+        </h1>
+        <p
+          className="text-[14px] leading-[1.7] mb-8"
+          style={{ color: COL.inkSoft }}
+        >
+          {isError
+            ? "Prøv igjen om litt, eller logg inn for å se den nyeste rapporten."
+            : "Logg inn for å se siste rapport, eller be om en ny lenke fra administrator."}
+        </p>
+        <a
+          href="/logg-inn"
+          className="inline-flex items-center gap-2 px-6 py-3 text-xs"
+          style={{
+            background: COL.ink,
+            color: COL.paper,
+            fontFamily: "'JetBrains Mono', monospace",
+            letterSpacing: "0.15em",
+            textTransform: "uppercase",
+            fontWeight: 600,
+            textDecoration: "none",
+          }}
+        >
+          <ShieldCheck size={13} />
+          <span>Logg inn</span>
+        </a>
+      </div>
+    </div>
+  );
 }

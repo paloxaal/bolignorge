@@ -21,6 +21,9 @@ import {
   Target,
   AlertCircle,
   LogOut,
+  Link2,
+  Copy,
+  Check,
 } from "lucide-react";
 import {
   BarChart,
@@ -2928,6 +2931,14 @@ function NumCell({ value, onChange }) {
 
 // ---------------- REPORT PAGE ----------------
 function ReportPage({ data, totals }) {
+  const [shareGenerating, setShareGenerating] = useState(false);
+  const [shareLink, setShareLink] = useState(null);
+  const [shareError, setShareError] = useState(null);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [reportLabel, setReportLabel] = useState(
+    `${data.meta?.reportPeriod || ""} ${data.meta?.reportYear || ""}`.trim()
+  );
+
   const handlePrint = () => window.print();
   const handleExport = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], {
@@ -2939,6 +2950,50 @@ function ReportPage({ data, totals }) {
     a.download = `bolig-norge-rapport-${data.meta.reportYear}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const generateShareLink = async () => {
+    setShareGenerating(true);
+    setShareError(null);
+    setShareCopied(false);
+    try {
+      // 24 bytes = 192 bits entropi → ~32 base64url-tegn
+      const bytes = new Uint8Array(24);
+      window.crypto.getRandomValues(bytes);
+      const token = btoa(String.fromCharCode(...bytes))
+        .replaceAll("+", "-")
+        .replaceAll("/", "_")
+        .replaceAll("=", "");
+
+      const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000); // +2 dager
+
+      const { error } = await supabase.from("share_tokens").insert({
+        token,
+        snapshot: data,
+        expires_at: expiresAt.toISOString(),
+        report_label: reportLabel || null,
+      });
+      if (error) throw error;
+
+      const url = `${window.location.origin}/styreportal/share/${token}`;
+      setShareLink({ url, expiresAt });
+    } catch (e) {
+      console.error("[share] generate failed:", e.message);
+      setShareError(e.message || "Klarte ikke lage lenke");
+    } finally {
+      setShareGenerating(false);
+    }
+  };
+
+  const copyToClipboard = async () => {
+    if (!shareLink?.url) return;
+    try {
+      await navigator.clipboard.writeText(shareLink.url);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch (e) {
+      console.error("[share] copy failed:", e.message);
+    }
   };
 
   return (
@@ -2967,6 +3022,141 @@ function ReportPage({ data, totals }) {
             <FileText size={12} /> Skriv ut / PDF
           </button>
         </div>
+      </div>
+
+      {/* Delingslenke */}
+      <div
+        className="px-5 py-5 border"
+        style={{ borderColor: COL.border, background: COL.card }}
+      >
+        <div className="flex items-start justify-between gap-6 mb-4">
+          <div>
+            <div
+              className="text-[10px] tracking-[0.2em] uppercase mb-1"
+              style={{ color: COL.muted }}
+            >
+              Del rapport med styret
+            </div>
+            <h3
+              className="text-base"
+              style={{
+                fontFamily: "'Fraunces', serif",
+                fontWeight: 500,
+                letterSpacing: "-0.01em",
+              }}
+            >
+              Lag delingslenke (gyldig i 2 dager)
+            </h3>
+            <p
+              className="text-[12px] mt-1 max-w-2xl"
+              style={{ color: COL.muted, lineHeight: 1.5 }}
+            >
+              Genererer en uknekkelig lenke som styremedlemmer kan bruke for å se
+              en frosset kopi av rapporten uten å logge inn. Lenken er
+              legitimasjonen — be styret om ikke å videresende. Etter 2 dager
+              må de logge inn på vanlig vis.
+            </p>
+          </div>
+          <button
+            onClick={generateShareLink}
+            disabled={shareGenerating}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs whitespace-nowrap"
+            style={{
+              background: COL.ink,
+              color: COL.paper,
+              opacity: shareGenerating ? 0.6 : 1,
+              cursor: shareGenerating ? "wait" : "pointer",
+            }}
+          >
+            {shareGenerating ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />}
+            {shareGenerating ? "Genererer …" : "Generer lenke"}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 mb-3">
+          <label
+            className="text-[10px] tracking-[0.2em] uppercase whitespace-nowrap"
+            style={{ color: COL.muted }}
+          >
+            Rapport-merkelapp
+          </label>
+          <input
+            type="text"
+            value={reportLabel}
+            onChange={(e) => setReportLabel(e.target.value)}
+            placeholder="F.eks. Mars 2026"
+            className="flex-1 p-2 text-[13px] border"
+            style={{
+              background: COL.paper,
+              borderColor: COL.border,
+              color: COL.inkSoft,
+            }}
+          />
+        </div>
+
+        {shareError && (
+          <div
+            className="text-[12px] py-2 px-3 mt-3 border-l-2"
+            style={{
+              background: "rgba(139, 46, 58, 0.06)",
+              borderLeftColor: COL.burgundy,
+              color: COL.burgundy,
+            }}
+          >
+            {shareError}
+          </div>
+        )}
+
+        {shareLink && (
+          <div
+            className="mt-4 p-4 border"
+            style={{ borderColor: COL.border, background: COL.paper }}
+          >
+            <div
+              className="text-[10px] tracking-[0.2em] uppercase mb-2"
+              style={{ color: COL.gold }}
+            >
+              Lenke generert · gyldig til{" "}
+              {shareLink.expiresAt.toLocaleString("nb-NO", {
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={shareLink.url}
+                onClick={(e) => e.target.select()}
+                className="flex-1 p-2 text-[12px] border"
+                style={{
+                  background: COL.paperWarm || "#FBF5E8",
+                  borderColor: COL.border,
+                  color: COL.ink,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              />
+              <button
+                onClick={copyToClipboard}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs whitespace-nowrap"
+                style={{
+                  background: shareCopied ? COL.sage || "#3F6B57" : COL.ink,
+                  color: COL.paper,
+                }}
+              >
+                {shareCopied ? <Check size={12} /> : <Copy size={12} />}
+                {shareCopied ? "Kopiert" : "Kopier"}
+              </button>
+            </div>
+            <div className="text-[11px] mt-3" style={{ color: COL.muted }}>
+              Lim inn i e-post til styret. Lenken viser eksakt det som ligger i
+              rapporten nå — endringer i dashbordet etterpå påvirker ikke denne
+              kopien.
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Report preview */}

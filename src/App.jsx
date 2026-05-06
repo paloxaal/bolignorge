@@ -7,6 +7,7 @@ import {
   Link,
   NavLink,
   useLocation,
+  useParams,
 } from "react-router-dom";
 import { Lock } from "lucide-react";
 import { COL } from "./data";
@@ -25,13 +26,25 @@ import Samfunnsansvar from "./pages/Samfunnsansvar";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
-import Styreportal from "./pages/Styreportal";
+import Styreportal, { StyreportalShare } from "./pages/Styreportal";
+
+// Public share route wrapper — leser :token fra URL og sender videre til komponenten
+function StyreportalShareRoute() {
+  const { token } = useParams();
+  return <StyreportalShare token={token} />;
+}
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Offentlig delingslenke — ingen Layout-wrapper (egen full-screen visning) */}
+          <Route
+            path="/styreportal/share/:token"
+            element={<StyreportalShareRoute />}
+          />
+
           <Route element={<Layout />}>
             <Route path="/" element={<Home />} />
             <Route path="/prosjekter" element={<Projects />} />
