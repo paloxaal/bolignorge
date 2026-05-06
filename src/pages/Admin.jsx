@@ -523,6 +523,7 @@ function AdminDashboard() {
     { id: "dashboard", label: "Oversikt", icon: LayoutDashboard },
     { id: "portfolio", label: "Portefølje", icon: Building2 },
     { id: "pipeline", label: "Pipeline", icon: Target },
+    { id: "financials", label: "Selskapstall", icon: TrendingUp },
     { id: "report", label: "Rapport", icon: FileText },
   ];
 
@@ -2284,6 +2285,7 @@ function FinancialsPage({ data, setData }) {
                 "År",
                 "Årsresultat",
                 "Utbytte",
+                "Fra år",
                 "Bokført EK",
                 "Akk. resultat",
                 "Akk. utbytte",
@@ -2336,6 +2338,12 @@ function FinancialsPage({ data, setData }) {
                 </td>
                 <td className="px-4 py-2">
                   <NumCell
+                    value={r.dividendFromYear}
+                    onChange={(v) => updateRow(r.year, { dividendFromYear: v })}
+                  />
+                </td>
+                <td className="px-4 py-2">
+                  <NumCell
                     value={r.ek}
                     onChange={(v) => updateRow(r.year, { ek: v })}
                   />
@@ -2377,8 +2385,7 @@ function FinancialsPage({ data, setData }) {
           className="px-4 py-3 text-[11px] border-t"
           style={{ color: COL.muted, borderColor: COL.borderSoft }}
         >
-          * Tilleggsutbytte. Utdelingsgrad akk. = akk. utbytte / akk. resultat
-          t.o.m. rapportert år.
+          * Foreløpig år. Utbytte føres i året det er utbetalt — kolonnen «Fra år» angir hvilket regnskapsår utbyttet stammer fra (utbetales typisk året etter regnskapsåret). Utdelingsgrad akk. = akk. utbytte / akk. resultat t.o.m. rapportert år.
         </div>
       </section>
     </div>
