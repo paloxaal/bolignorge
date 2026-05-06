@@ -18,6 +18,7 @@ import {
   Archive,
   AlertCircle,
   FolderOpen,
+  Menu,
 } from "lucide-react";
 import {
   BarChart,
@@ -455,6 +456,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
   const [page, setPage] = useState("dashboard");
   const [viewingProject, setViewingProject] = useState(null);
   const [viewingCase, setViewingCase] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const totals = computeTotals(data);
 
@@ -519,7 +521,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           }
         }
       `}</style>
-      <div className="print:hidden" style={{ position: "fixed", top: 0, right: 0, zIndex: 100, padding: "12px 20px", background: COL.paper, borderBottom: `1px solid ${COL.border}`, borderLeft: `1px solid ${COL.border}`, borderBottomLeftRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, display: "flex", alignItems: "center", gap: 16 }}>
+      <div className="hidden md:flex print:hidden items-center" style={{ position: "fixed", top: 0, right: 0, zIndex: 100, padding: "12px 20px", background: COL.paper, borderBottom: `1px solid ${COL.border}`, borderLeft: `1px solid ${COL.border}`, borderBottomLeftRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, gap: 16 }}>
         {mode === "share" ? (
           <span style={{ color: COL.gold }}>
             FROSSET KOPI{expiresAt ? ` · GYLDIG TIL ${new Date(expiresAt).toLocaleDateString("nb-NO", { day: "numeric", month: "short" })}` : ""}
@@ -552,12 +554,21 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
         )}
       </div>
 
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="md:hidden fixed inset-0 bg-black/40 z-30 print:hidden"
+          aria-hidden="true"
+        />
+      )}
+
       {/* SIDEBAR */}
       <aside
-        className="w-64 flex-shrink-0 border-r flex flex-col print:hidden"
+        className={`w-64 flex-shrink-0 border-r flex flex-col print:hidden fixed md:static inset-y-0 left-0 z-40 transform transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
         style={{ borderColor: COL.border, background: COL.paperWarm }}
       >
-        <div className="px-6 py-7 border-b" style={{ borderColor: COL.border }}>
+        <div className="px-6 py-7 border-b flex items-center justify-between" style={{ borderColor: COL.border }}>
           <div
             className="flex items-center gap-1.5 text-[11px] tracking-[0.25em] uppercase"
             style={{ color: COL.gold }}
@@ -565,6 +576,14 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             <ShieldCheck size={12} strokeWidth={2} />
             <span style={{ fontWeight: 600 }}>Styreportal</span>
           </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="md:hidden p-1 rounded"
+            aria-label="Lukk meny"
+            style={{ color: COL.muted }}
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="flex-1 px-3 py-5 space-y-1">
@@ -574,7 +593,10 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             return (
               <button
                 key={n.id}
-                onClick={() => setPage(n.id)}
+                onClick={() => {
+                  setPage(n.id);
+                  setSidebarOpen(false);
+                }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all"
                 style={{
                   background: active ? COL.ink : "transparent",
@@ -588,6 +610,49 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             );
           })}
         </nav>
+
+        {/* Mobile-only actions (replaces hidden floating chip on mobile) */}
+        <div className="md:hidden mx-3 mb-3 grid grid-cols-2 gap-2">
+          <button
+            onClick={() => {
+              const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `bolig-norge-styreportal-${new Date().toISOString().split("T")[0]}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded text-[11px] border"
+            style={{ borderColor: COL.border, color: COL.ink, fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            <Download size={12} /> JSON
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded text-[11px] border"
+            style={{ borderColor: COL.border, color: COL.ink, fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            <FileText size={12} /> PDF
+          </button>
+          {mode === "share" ? (
+            <a
+              href="/logg-inn"
+              className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2 rounded text-[11px]"
+              style={{ background: COL.ink, color: COL.paper, fontFamily: "'JetBrains Mono', monospace", textDecoration: "none" }}
+            >
+              <ShieldCheck size={12} /> LOGG INN
+            </a>
+          ) : (
+            <button
+              onClick={signOut}
+              className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2 rounded text-[11px]"
+              style={{ background: COL.ink, color: COL.paper, fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              <LogOut size={12} /> LOGG UT
+            </button>
+          )}
+        </div>
 
         {/* Read-only banner */}
         <div
@@ -643,10 +708,45 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
 
       {/* MAIN */}
       <main className="flex-1 min-w-0">
+        {/* Mobile-only top bar with hamburger */}
+        <div
+          className="md:hidden flex items-center justify-between px-4 py-3 border-b print:hidden sticky top-0 z-20"
+          style={{ borderColor: COL.border, background: COL.paper }}
+        >
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-1.5 -ml-1.5 rounded"
+            aria-label="Åpne meny"
+            style={{ color: COL.ink }}
+          >
+            <Menu size={22} />
+          </button>
+          <div
+            className="text-base"
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {NAV.find((n) => n.id === page)?.label}
+          </div>
+          {mode === "share" ? (
+            <span
+              className="text-[9px] tracking-[0.15em] uppercase"
+              style={{ color: COL.gold, fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              Frosset
+            </span>
+          ) : (
+            <span className="w-6" />
+          )}
+        </div>
+
         {page !== "dashboard" && (
           <header
             data-report="keep"
-            className="flex items-center justify-between px-10 py-5 border-b print:hidden"
+            className="hidden md:flex items-center justify-between px-10 py-5 border-b print:hidden"
             style={{ borderColor: COL.border }}
           >
             <div>
@@ -684,7 +784,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             </div>
           </header>
         )}
-        <div className="px-10 py-8">
+        <div className="px-4 py-6 md:px-10 md:py-8">
           {page === "dashboard" && (
             <DashboardPage data={data} totals={totals} />
           )}
@@ -2136,10 +2236,10 @@ function PortfolioPage({ data, onView }) {
       </div>
 
       <div
-        className="border"
+        className="border overflow-x-auto"
         style={{ borderColor: COL.border, background: COL.card }}
       >
-        <table className="w-full text-sm">
+        <table className="w-full text-sm" style={{ minWidth: 720 }}>
           <thead>
             <tr
               className="border-b"

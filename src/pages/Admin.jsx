@@ -29,6 +29,7 @@ import {
   Upload,
   ExternalLink,
   FolderOpen,
+  Menu,
 } from "lucide-react";
 import {
   BarChart,
@@ -483,6 +484,7 @@ function AdminDashboard() {
   const [page, setPage] = useState("dashboard");
   const [editingProject, setEditingProject] = useState(null);
   const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Load from storage on mount
   useEffect(() => {
@@ -606,35 +608,54 @@ function AdminDashboard() {
       }}
     >
       <FontImports />
-      <div style={{ position: "fixed", top: 0, right: 0, zIndex: 100, padding: "12px 20px", background: COL.paper, borderBottom: `1px solid ${COL.border}`, borderLeft: `1px solid ${COL.border}`, borderBottomLeftRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, display: "flex", alignItems: "center", gap: 16 }}>
+      <div className="hidden md:flex items-center" style={{ position: "fixed", top: 0, right: 0, zIndex: 100, padding: "12px 20px", background: COL.paper, borderBottom: `1px solid ${COL.border}`, borderLeft: `1px solid ${COL.border}`, borderBottomLeftRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, gap: 16 }}>
         <span style={{ color: COL.muted }}>{profile?.full_name || profile?.email}</span>
         <button onClick={signOut} style={{ display: "flex", alignItems: "center", gap: 6, color: COL.ink, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
           <LogOut size={12} /> LOGG UT
         </button>
       </div>
 
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="md:hidden fixed inset-0 bg-black/40 z-30 print:hidden"
+          aria-hidden="true"
+        />
+      )}
+
       {/* SIDEBAR */}
       <aside
-        className="w-64 flex-shrink-0 border-r flex flex-col print:hidden"
+        className={`w-64 flex-shrink-0 border-r flex flex-col print:hidden fixed md:static inset-y-0 left-0 z-40 transform transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
         style={{ borderColor: COL.border, background: COL.paperWarm }}
       >
         <div
-          className="px-6 py-7 border-b"
+          className="px-6 py-7 border-b flex items-start justify-between"
           style={{ borderColor: COL.border }}
         >
-          <div
-            className="flex items-center gap-1.5 text-[11px] tracking-[0.25em] uppercase"
-            style={{ color: COL.gold }}
-          >
-            <ShieldCheck size={12} strokeWidth={2} />
-            <span style={{ fontWeight: 600 }}>Admin</span>
+          <div>
+            <div
+              className="flex items-center gap-1.5 text-[11px] tracking-[0.25em] uppercase"
+              style={{ color: COL.gold }}
+            >
+              <ShieldCheck size={12} strokeWidth={2} />
+              <span style={{ fontWeight: 600 }}>Admin</span>
+            </div>
+            <div
+              className="text-[10px] tracking-[0.2em] uppercase mt-2"
+              style={{ color: COL.muted }}
+            >
+              Konfidensielt
+            </div>
           </div>
-          <div
-            className="text-[10px] tracking-[0.2em] uppercase mt-2"
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="md:hidden p-1 rounded -mt-1 -mr-2"
+            aria-label="Lukk meny"
             style={{ color: COL.muted }}
           >
-            Konfidensielt
-          </div>
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="flex-1 px-3 py-5 space-y-1">
@@ -644,7 +665,10 @@ function AdminDashboard() {
             return (
               <button
                 key={n.id}
-                onClick={() => setPage(n.id)}
+                onClick={() => {
+                  setPage(n.id);
+                  setSidebarOpen(false);
+                }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all"
                 style={{
                   background: active ? COL.ink : "transparent",
@@ -659,6 +683,20 @@ function AdminDashboard() {
           })}
         </nav>
 
+        {/* Mobile-only sign-out */}
+        <div className="md:hidden mx-3 mb-3">
+          <div className="text-[10px] tracking-[0.18em] uppercase mb-2 px-1" style={{ color: COL.muted }}>
+            {profile?.full_name || profile?.email}
+          </div>
+          <button
+            onClick={signOut}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded text-[11px]"
+            style={{ background: COL.ink, color: COL.paper, fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            <LogOut size={12} /> LOGG UT
+          </button>
+        </div>
+
         <div
           className="px-6 py-4 border-t text-[11px] flex items-center gap-2"
           style={{ borderColor: COL.border, color: COL.muted }}
@@ -670,9 +708,35 @@ function AdminDashboard() {
 
       {/* MAIN */}
       <main className="flex-1 min-w-0">
-        {/* Top bar */}
+        {/* Mobile-only top bar with hamburger */}
+        <div
+          className="md:hidden flex items-center justify-between px-4 py-3 border-b print:hidden sticky top-0 z-20"
+          style={{ borderColor: COL.border, background: COL.paper }}
+        >
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-1.5 -ml-1.5 rounded"
+            aria-label="Åpne meny"
+            style={{ color: COL.ink }}
+          >
+            <Menu size={22} />
+          </button>
+          <div
+            className="text-base"
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {NAV.find((n) => n.id === page)?.label}
+          </div>
+          <SaveIndicator status={saveStatus} />
+        </div>
+
+        {/* Desktop top bar */}
         <header
-          className="flex items-center justify-between px-10 py-5 border-b print:hidden"
+          className="hidden md:flex items-center justify-between px-10 py-5 border-b print:hidden"
           style={{ borderColor: COL.border }}
         >
           <div>
@@ -708,7 +772,7 @@ function AdminDashboard() {
           </div>
         </header>
 
-        <div className="px-10 py-8">
+        <div className="px-4 py-6 md:px-10 md:py-8">
           {page === "dashboard" && (
             <DashboardPage data={data} setData={setData} totals={totals} />
           )}
@@ -2625,10 +2689,10 @@ function PortfolioPage({ data, onEdit, onAdd }) {
 
       {/* Table */}
       <div
-        className="border"
+        className="border overflow-x-auto"
         style={{ borderColor: COL.border, background: COL.card }}
       >
-        <table className="w-full text-sm">
+        <table className="w-full text-sm" style={{ minWidth: 720 }}>
           <thead>
             <tr
               className="border-b"
