@@ -707,18 +707,32 @@ function AdminDashboard() {
 // ---------------- COMPUTED ----------------
 function computeTotals(data) {
   const proj = data.projects;
-  const omsetning = proj.reduce((s, p) => s + (Number(p.omsetning) || 0), 0);
-  const db = proj.reduce((s, p) => s + (Number(p.db) || 0), 0);
+  // BN's eierandel = (100 - partnerShare) / 100. Default 100 % hvis ikke angitt.
+  const bnShare = (p) => {
+    const ps = Number(p.partnerShare);
+    return isNaN(ps) ? 1 : (100 - ps) / 100;
+  };
+  const omsetningTotal = proj.reduce((s, p) => s + (Number(p.omsetning) || 0), 0);
+  const omsetning = proj.reduce(
+    (s, p) => s + (Number(p.omsetning) || 0) * bnShare(p),
+    0
+  );
+  const db = proj.reduce((s, p) => s + (Number(p.db) || 0), 0); // allerede justert i kildedata
   const units = proj.reduce((s, p) => s + (Number(p.units) || 0), 0);
   const margin = omsetning > 0 ? (db / omsetning) * 100 : 0;
-  const merverdier = proj.reduce((s, p) => s + (Number(p.merverdiTomt) || 0), 0);
-  const lastFin = [...data.financials].reverse().find(
+  const merverdier = proj.reduce(
+    (s, p) => s + (Number(p.merverdiTomt) || 0),
+    0
+  );
+  const fin = data.financials || [];
+  const lastFin = [...fin].reverse().find(
     (f) => f.ek !== null && f.ek !== undefined
   );
   const bokfortEK = lastFin?.ek ?? 0;
   const nav = bokfortEK + merverdier;
   return {
-    omsetning,
+    omsetning,        // justert for eierandeler
+    omsetningTotal,   // total prosjektverdi (uten justering)
     db,
     units,
     margin,
@@ -811,6 +825,7 @@ function DashboardPage({ data, setData, totals }) {
         <KPICard
           label="Total porteføljeverdi"
           value={fmtMrd(totals.omsetning)}
+          sub={`Total prosjektscope: ${fmtMrd(totals.omsetningTotal)}`}
           accent
         />
         <KPICard label="Dekningsbidrag" value={fmtMrd(totals.db)} />
@@ -830,6 +845,11 @@ function DashboardPage({ data, setData, totals }) {
       {/* Verdijustert egenkapital */}
       <section>
         <NAVCard totals={totals} />
+      </section>
+
+      {/* Selskapets kapital — nøkkeltall fra Selskapstall-fanen */}
+      <section>
+        <CapitalSummary financials={data.financials || []} />
       </section>
 
       {/* Market & Outlook */}
@@ -1048,6 +1068,133 @@ function NAVRow({ label, value, width, color }) {
           style={{ width: `${width}%`, background: color }}
         />
       </div>
+    </div>
+  );
+}
+
+// ---------------- CAPITAL SUMMARY ----------------
+function CapitalSummary({ financials }) {
+  if (!financials || financials.length === 0) return null;
+
+  const confirmed = financials.filter(
+    (f) => !f.projected && f.ek !== null && f.ek !== undefined
+  );
+  if (confirmed.length === 0) return null;
+
+  const first = confirmed[0];
+  const last = confirmed[confirmed.length - 1];
+  const akkResultat = financials.reduce(
+    (s, f) => s + (Number(f.result) || 0),
+    0
+  );
+  const akkUtbytte = financials.reduce(
+    (s, f) => s + (Number(f.dividend) || 0),
+    0
+  );
+  const startEK = first.ek;
+  const sluttEK = last.ek;
+  // Total avkastning siden start = (slutt-EK + akk. utbytte - innskutt) / start-EK
+  // Vi har ikke innskutt-EK eksplisitt, så bruker forenklet:
+  // (slutt-EK + akk. utbytte) / start-EK gir grov totalavkastning
+  const totalReturn = startEK > 0 ? (sluttEK + akkUtbytte) / startEK : 0;
+  const aar = last.year - first.year;
+  const cagr = aar > 0 && startEK > 0 ? Math.pow(totalReturn, 1 / aar) - 1 : 0;
+  const utdGrad = akkResultat > 0 ? (akkUtbytte / akkResultat) * 100 : 0;
+
+  return (
+    <div
+      className="border"
+      style={{ borderColor: COL.border, background: COL.card }}
+    >
+      <div
+        className="px-7 py-5 border-b flex items-baseline justify-between"
+        style={{ borderColor: COL.border, background: COL.paperWarm }}
+      >
+        <div>
+          <div
+            className="text-[10px] tracking-[0.2em] uppercase mb-1"
+            style={{ color: COL.muted }}
+          >
+            Selskapets kapital
+          </div>
+          <h3
+            className="text-xl"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 500 }}
+          >
+            EK-binding mot utbytter — siden {first.year}
+          </h3>
+        </div>
+        <div
+          className="text-[10px]"
+          style={{
+            color: COL.muted,
+            fontFamily: "'JetBrains Mono', monospace",
+          }}
+        >
+          {first.year} → {last.year} ({aar} år)
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: COL.border }}>
+        <CapStat
+          label="Bokført EK"
+          value={fmtNOK(sluttEK) + " m"}
+          sub={`Startleverket ${first.year}: ${fmtNOK(startEK)} m`}
+        />
+        <CapStat
+          label="Akk. utbytte"
+          value={fmtNOK(akkUtbytte) + " m"}
+          sub={`Utdelingsgrad: ${fmtPct(utdGrad)}`}
+        />
+        <CapStat
+          label="Akk. resultat"
+          value={fmtNOK(akkResultat) + " m"}
+          sub={`= EK + utbytte − inj.`}
+        />
+        <CapStat
+          label="Total avkastning"
+          value={`${totalReturn.toFixed(2)}×`}
+          sub={`CAGR: ${fmtPct(cagr * 100)}`}
+          accent
+        />
+      </div>
+      <div
+        className="px-7 py-3 text-[11px] border-t"
+        style={{ color: COL.muted, borderColor: COL.borderSoft }}
+      >
+        Total avkastning = (slutt-EK + akk. utbytte) / start-EK. Reflekterer både innestående EK og kapital som er delt ut til eier(e).
+      </div>
+    </div>
+  );
+}
+
+function CapStat({ label, value, sub, accent }) {
+  return (
+    <div className="px-6 py-5" style={{ background: COL.card }}>
+      <div
+        className="text-[10px] tracking-[0.2em] uppercase mb-2"
+        style={{ color: COL.muted }}
+      >
+        {label}
+      </div>
+      <div
+        className="text-[24px] leading-none"
+        style={{
+          fontFamily: "'Fraunces', serif",
+          fontWeight: 500,
+          letterSpacing: "-0.01em",
+          color: accent ? COL.gold : COL.ink,
+        }}
+      >
+        {value}
+      </div>
+      {sub && (
+        <div
+          className="mt-2 text-[10px]"
+          style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          {sub}
+        </div>
+      )}
     </div>
   );
 }
@@ -1490,7 +1637,7 @@ function CaseEditModal({ caseData, onSave, onDelete, onClose }) {
 }
 
 // ---------------- KPI CARD ----------------
-function KPICard({ label, value, accent }) {
+function KPICard({ label, value, accent, sub }) {
   return (
     <div className="px-7 py-7" style={{ background: COL.card }}>
       <div
@@ -1510,6 +1657,14 @@ function KPICard({ label, value, accent }) {
       >
         {value}
       </div>
+      {sub && (
+        <div
+          className="mt-2 text-[10px] tracking-[0.15em] uppercase"
+          style={{ color: COL.muted }}
+        >
+          {sub}
+        </div>
+      )}
     </div>
   );
 }
@@ -2118,19 +2273,24 @@ function Select({ value, onChange, options }) {
 
 // ---------------- FINANCIALS PAGE ----------------
 function FinancialsPage({ data, setData }) {
+  const financials = data.financials || [];
+
   const updateRow = (year, patch) => {
     setData((d) => ({
       ...d,
-      financials: d.financials.map((r) => (r.year === year ? { ...r, ...patch } : r)),
+      financials: (d.financials || []).map((r) =>
+        r.year === year ? { ...r, ...patch } : r
+      ),
     }));
   };
 
   const addYear = () => {
-    const max = Math.max(...data.financials.map((f) => f.year));
+    const fin = data.financials || [];
+    const max = fin.length > 0 ? Math.max(...fin.map((f) => f.year)) : 2024;
     setData((d) => ({
       ...d,
       financials: [
-        ...d.financials,
+        ...(d.financials || []),
         { year: max + 1, result: null, dividend: 0, ek: null, projected: true },
       ],
     }));
@@ -2140,7 +2300,7 @@ function FinancialsPage({ data, setData }) {
   const rows = useMemo(() => {
     let accRes = 0;
     let accDiv = 0;
-    return data.financials.map((r) => {
+    return financials.map((r) => {
       if (r.result !== null && !isNaN(r.result)) accRes += r.result;
       if (r.dividend !== null && !isNaN(r.dividend)) accDiv += r.dividend;
       return {
@@ -2150,7 +2310,7 @@ function FinancialsPage({ data, setData }) {
         utdGrad: accRes > 0 ? (accDiv / accRes) * 100 : null,
       };
     });
-  }, [data.financials]);
+  }, [financials]);
 
   const chartRows = rows.map((r) => ({
     year: r.year,
@@ -2162,6 +2322,26 @@ function FinancialsPage({ data, setData }) {
   }));
 
   const lastConfirmed = [...rows].reverse().find((r) => !r.projected);
+
+  if (rows.length === 0) {
+    return (
+      <div
+        className="border p-12 text-center"
+        style={{ borderColor: COL.border, background: COL.card, color: COL.muted }}
+      >
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 22, color: COL.ink }}>
+          Ingen finansielle data
+        </div>
+        <button
+          onClick={addYear}
+          className="mt-6 inline-flex items-center gap-1.5 px-4 py-2 text-xs"
+          style={{ background: COL.ink, color: COL.paper }}
+        >
+          <Plus size={12} /> Legg til første år
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10">
@@ -2241,6 +2421,14 @@ function FinancialsPage({ data, setData }) {
               stroke={COL.burgundy}
               strokeWidth={1.5}
               strokeDasharray="4 4"
+              dot={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="Akk. utbytte"
+              stroke={COL.gold}
+              strokeWidth={1.5}
+              strokeDasharray="2 4"
               dot={false}
             />
           </ComposedChart>
