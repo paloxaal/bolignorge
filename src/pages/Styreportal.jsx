@@ -1165,7 +1165,7 @@ function ProjectByProjectSection({ data, num }) {
   return (
     <section>
       <SectionHeader num={num} title="Prosjekt for prosjekt" />
-      <div className="mt-6 space-y-8">
+      <div className="mt-6 space-y-10">
         {projects.map((p) => {
           const sold = Number(p.unitsSold) || 0;
           const total = Number(p.units) || 0;
@@ -1173,52 +1173,59 @@ function ProjectByProjectSection({ data, num }) {
           return (
             <div
               key={p.id}
-              className="grid grid-cols-3 gap-8 pb-8"
+              className="pb-10"
               style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
             >
-              <div>
-                {p.imageUrl && (
-                  <div
-                    className="mb-4 overflow-hidden"
-                    style={{ borderRadius: 2 }}
-                  >
-                    <img
-                      src={p.imageUrl}
-                      alt={p.name}
-                      className="w-full h-auto"
-                      style={{ display: "block", aspectRatio: "16 / 10", objectFit: "cover" }}
-                    />
-                  </div>
-                )}
+              {/* Header: name + location */}
+              <div className="mb-5">
                 <h4
-                  className="text-xl mb-1"
+                  className="text-2xl mb-1"
                   style={{
                     fontFamily: "'Fraunces', serif",
                     fontWeight: 500,
                     color: COL.ink,
+                    fontVariationSettings: '"WONK" 0, "opsz" 144',
                   }}
                 >
                   {p.name}
                 </h4>
-                <div className="text-xs mb-4" style={{ color: COL.muted }}>
+                <div className="text-xs" style={{ color: COL.muted }}>
                   {p.location}
                 </div>
+              </div>
+
+              {/* Image + facts in 2 columns */}
+              <div
+                className={
+                  p.imageUrl
+                    ? "grid grid-cols-1 md:grid-cols-2 gap-6 mb-6"
+                    : "mb-6"
+                }
+              >
+                {p.imageUrl && (
+                  <div className="overflow-hidden">
+                    <img
+                      src={p.imageUrl}
+                      alt={p.name}
+                      className="w-full h-auto"
+                      style={{
+                        display: "block",
+                        aspectRatio: "16 / 10",
+                        objectFit: "cover",
+                      }}
+                    />
+                  </div>
+                )}
                 <div className="space-y-1.5 text-xs">
                   <FactRow
                     label="Antall boliger"
                     value={total > 0 ? total : "—"}
                   />
                   {sold > 0 && total > 0 && (
-                    <FactRow
-                      label="Solgt"
-                      value={`${sold} (${pct} %)`}
-                    />
+                    <FactRow label="Solgt" value={`${sold} (${pct} %)`} />
                   )}
                   {sold > 0 && total > 0 && (
-                    <FactRow
-                      label="Ledig"
-                      value={Math.max(0, total - sold)}
-                    />
+                    <FactRow label="Ledig" value={Math.max(0, total - sold)} />
                   )}
                   {p.kvm > 0 && (
                     <FactRow label="BRA-S" value={fmtNOK(p.kvm) + " kvm"} />
@@ -1260,7 +1267,9 @@ function ProjectByProjectSection({ data, num }) {
                   )}
                 </div>
               </div>
-              <div className="col-span-2">
+
+              {/* Status — full width below */}
+              <div>
                 <div
                   className="text-[10px] tracking-[0.2em] uppercase mb-2"
                   style={{ color: COL.muted }}
@@ -1268,8 +1277,8 @@ function ProjectByProjectSection({ data, num }) {
                   Status
                 </div>
                 <p
-                  className="text-[13px] leading-[1.7] whitespace-pre-line"
-                  style={{ color: COL.inkSoft }}
+                  className="text-[14px] leading-[1.7] whitespace-pre-line"
+                  style={{ color: COL.inkSoft, maxWidth: "85ch" }}
                 >
                   {p.statusLong || (
                     <em style={{ color: COL.muted }}>Ingen statustekst.</em>
@@ -3044,14 +3053,21 @@ export default function Styreportal() {
   }
 
   return (
-    <StyreportalCore
-      data={data}
-      mode="auth"
-      profile={profile}
-      signOut={signOut}
-      lastSync={lastSync}
-      onReload={loadData}
-    />
+    <>
+      <style>{`
+        h1, h2, h3, h4, h5, h6, [style*="Fraunces"] {
+          font-variation-settings: "WONK" 0, "opsz" 144, "SOFT" 50;
+        }
+      `}</style>
+      <StyreportalCore
+        data={data}
+        mode="auth"
+        profile={profile}
+        signOut={signOut}
+        lastSync={lastSync}
+        onReload={loadData}
+      />
+    </>
   );
 }
 
@@ -3115,12 +3131,19 @@ export function StyreportalShare({ token }) {
   }
 
   return (
-    <StyreportalCore
-      data={snapshot}
-      mode="share"
-      expiresAt={expiresAt}
-      lastSync={createdAt ? new Date(createdAt) : null}
-    />
+    <>
+      <style>{`
+        h1, h2, h3, h4, h5, h6, [style*="Fraunces"] {
+          font-variation-settings: "WONK" 0, "opsz" 144, "SOFT" 50;
+        }
+      `}</style>
+      <StyreportalCore
+        data={snapshot}
+        mode="share"
+        expiresAt={expiresAt}
+        lastSync={createdAt ? new Date(createdAt) : null}
+      />
+    </>
   );
 }
 
