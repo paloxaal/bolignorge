@@ -784,7 +784,13 @@ function DashboardPage({ data, totals }) {
             Marked & outlook
           </h2>
         </div>
-        <div className="space-y-8">
+        <div
+          className={
+            data.market?.imageUrl
+              ? "grid grid-cols-1 lg:grid-cols-2 gap-8"
+              : ""
+          }
+        >
           <div
             className="text-[15px] leading-[1.7] whitespace-pre-line"
             style={{ color: COL.inkSoft }}

@@ -609,7 +609,7 @@ function AdminDashboard() {
 
       {/* SIDEBAR */}
       <aside
-        className="w-64 flex-shrink-0 border-r flex flex-col"
+        className="w-64 flex-shrink-0 border-r flex flex-col print:hidden"
         style={{ borderColor: COL.border, background: COL.paperWarm }}
       >
         <div
@@ -660,7 +660,7 @@ function AdminDashboard() {
       <main className="flex-1 min-w-0">
         {/* Top bar */}
         <header
-          className="flex items-center justify-between px-10 py-5 border-b"
+          className="flex items-center justify-between px-10 py-5 border-b print:hidden"
           style={{ borderColor: COL.border }}
         >
           <div>
@@ -999,7 +999,13 @@ function DashboardPage({ data, setData, totals }) {
         </div>
 
           {!editingMarket ? (
-            <div className="space-y-8">
+            <div
+              className={
+                data.market.imageUrl
+                  ? "grid grid-cols-1 lg:grid-cols-2 gap-8"
+                  : ""
+              }
+            >
               <div
                 className="text-[15px] leading-[1.7] whitespace-pre-line"
                 style={{ color: COL.inkSoft }}
@@ -3169,9 +3175,23 @@ function ReportPage({ data, totals }) {
 
   return (
     <div className="space-y-6">
+      {/* Print stylesheet */}
+      <style>{`
+        @media print {
+          @page { size: A4; margin: 1.2cm; }
+          html, body { background: #fafaf7 !important; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .print\\:hidden { display: none !important; }
+          main { padding: 0 !important; }
+          section { break-inside: avoid; page-break-inside: avoid; }
+          h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+          img { break-inside: avoid; page-break-inside: avoid; }
+        }
+      `}</style>
+
       {/* Toolbar */}
       <div
-        className="flex items-center justify-between px-4 py-3 border"
+        className="flex items-center justify-between px-4 py-3 border print:hidden"
         style={{ borderColor: COL.border, background: COL.card }}
       >
         <div className="text-xs" style={{ color: COL.muted }}>
@@ -3197,7 +3217,7 @@ function ReportPage({ data, totals }) {
 
       {/* Delingslenke */}
       <div
-        className="px-5 py-5 border"
+        className="px-5 py-5 border print:hidden"
         style={{ borderColor: COL.border, background: COL.card }}
       >
         <div className="flex items-start justify-between gap-6 mb-4">
@@ -3552,6 +3572,103 @@ function ReportPage({ data, totals }) {
               <SectionHeader num="06" title="Selskapstall" />
               <div className="mt-4">
                 <CapitalSummary financials={data.financials || []} />
+              </div>
+              <div className="mt-6">
+                <div
+                  className="text-[10px] tracking-[0.2em] uppercase mb-2"
+                  style={{ color: COL.muted }}
+                >
+                  År for år (mNOK)
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ borderBottom: `2px solid ${COL.ink}` }}>
+                      {[
+                        "År",
+                        "Årsresultat",
+                        "Utbytte",
+                        "Bokført EK",
+                        "Gjeld",
+                        "Akk. resultat",
+                        "Akk. utbytte",
+                        "Utd.grad",
+                      ].map((h, i) => (
+                        <th
+                          key={h}
+                          className={`px-3 py-2.5 text-[10px] tracking-[0.15em] uppercase ${
+                            i === 0 ? "text-left" : "text-right"
+                          }`}
+                          style={{ color: COL.muted }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      let accRes = 0;
+                      let accDiv = 0;
+                      return (data.financials || []).map((r) => {
+                        if (r.result !== null && !isNaN(r.result))
+                          accRes += r.result;
+                        if (r.dividend !== null && !isNaN(r.dividend))
+                          accDiv += r.dividend;
+                        const utd =
+                          accRes > 0 ? (accDiv / accRes) * 100 : null;
+                        return (
+                          <tr
+                            key={r.year}
+                            style={{
+                              borderBottom: `1px solid ${COL.borderSoft}`,
+                            }}
+                          >
+                            <td
+                              className="px-3 py-2.5"
+                              style={{
+                                fontFamily: "'JetBrains Mono', monospace",
+                              }}
+                            >
+                              {r.year}
+                              {r.projected && (
+                                <span
+                                  className="ml-1 text-[10px]"
+                                  style={{ color: COL.gold }}
+                                >
+                                  *
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-right" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }}>{r.result !== null && !isNaN(r.result) ? fmtNOK(r.result) : "—"}</td>
+                            <td className="px-3 py-2.5 text-right" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }}>{r.dividend !== null && !isNaN(r.dividend) ? fmtNOK(r.dividend) : "—"}</td>
+                            <td className="px-3 py-2.5 text-right" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }}>{r.ek !== null && !isNaN(r.ek) ? fmtNOK(r.ek) : "—"}</td>
+                            <td className="px-3 py-2.5 text-right" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: COL.muted }}>{fmtNOK(r.gjeld ?? 0)}</td>
+                            <td className="px-3 py-2.5 text-right" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: COL.muted }}>{fmtNOK(accRes)}</td>
+                            <td className="px-3 py-2.5 text-right" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: COL.muted }}>{fmtNOK(accDiv)}</td>
+                            <td
+                              className="px-3 py-2.5 text-right"
+                              style={{
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: 13,
+                              }}
+                            >
+                              {utd !== null
+                                ? utd.toFixed(1).replace(".", ",") + " %"
+                                : "—"}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+                <div
+                  className="mt-2 text-[11px]"
+                  style={{ color: COL.muted }}
+                >
+                  * Foreløpig år. Utdelingsgrad akk. = akk. utbytte / akk.
+                  resultat t.o.m. rapportert år.
+                </div>
               </div>
             </section>
           )}
