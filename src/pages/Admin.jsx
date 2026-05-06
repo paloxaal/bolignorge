@@ -523,7 +523,6 @@ function AdminDashboard() {
     { id: "dashboard", label: "Oversikt", icon: LayoutDashboard },
     { id: "portfolio", label: "Portefølje", icon: Building2 },
     { id: "pipeline", label: "Pipeline", icon: Target },
-    { id: "financials", label: "Selskapstall", icon: TrendingUp },
     { id: "report", label: "Rapport", icon: FileText },
   ];
 
@@ -682,11 +681,7 @@ function AdminDashboard() {
           )}
           {page === "pipeline" && (
             <PipelinePage data={data} setData={setData} />
-          )}
-          {page === "financials" && (
-            <FinancialsPage data={data} setData={setData} />
-          )}
-          {page === "report" && (
+          )}          {page === "report" && (
             <ReportPage data={data} totals={totals} />
           )}
         </div>

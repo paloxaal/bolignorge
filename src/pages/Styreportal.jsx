@@ -480,7 +480,6 @@ function StyreportalCore() {
     { id: "dashboard", label: "Oversikt", icon: LayoutDashboard },
     { id: "portfolio", label: "Portefølje", icon: Building2 },
     { id: "pipeline", label: "Pipeline", icon: Target },
-    { id: "financials", label: "Selskapstall", icon: TrendingUp },
   ];
 
   return (
@@ -642,9 +641,7 @@ function StyreportalCore() {
           )}
           {page === "pipeline" && (
             <PipelinePage data={data} onView={setViewingCase} />
-          )}
-          {page === "financials" && <FinancialsPage data={data} />}
-        </div>
+          )}        </div>
 
         {/* Footer disclaimer */}
         <footer
