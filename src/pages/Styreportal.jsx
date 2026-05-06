@@ -45,54 +45,38 @@ const COL = {
   muted: "#6B6452",
 };
 
-// Storage key — same as admin dashboard so board portal mirrors live data
-// In production this would be a shared backend (e.g. Supabase) with role-based access:
-// admin writes, board reads via "published" snapshot
-const STORAGE_KEY = "bn_dashboard_v1";
+// Storage shim mot Supabase singleton-rad (public.dashboard_state, id='main').
+// Styreportalen er read-only; admin skriver, board leser via RLS-policy.
+// LockManager-deadlock håndteres på klient-init i src/lib/supabase.js (noOpLock).
+const TIMEOUT_MS = 5000;
+const withTimeout = (p, label) =>
+  Promise.race([
+    p,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout ${label} (${TIMEOUT_MS}ms)`)), TIMEOUT_MS)
+    ),
+  ]);
+
 const storage = {
   get: async () => {
     try {
-      // Refresh sesjonen for å unngå at gammel token henger
-      await supabase.auth.getSession();
-      const queryPromise = supabase
-        .from("dashboard_state")
-        .select("data")
-        .eq("id", "main")
-        .maybeSingle();
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout (10s)")), 10000)
+      const { data, error } = await withTimeout(
+        supabase
+          .from("dashboard_state")
+          .select("data")
+          .eq("id", "main")
+          .maybeSingle(),
+        "load"
       );
-      const result = await Promise.race([queryPromise, timeoutPromise]);
-      const { data, error } = result;
       if (error) {
         console.error("[dashboard] load error:", error.message);
         return null;
       }
       if (!data) return null;
-      return { value: JSON.stringify(data.data) };
+      return data.data;
     } catch (e) {
       console.error("[dashboard] load failed:", e.message);
       return null;
-    }
-  },
-  set: async (_key, value) => {
-    try {
-      const { data: userData } = await supabase.auth.getUser();
-      const { error } = await supabase
-        .from("dashboard_state")
-        .upsert({
-          id: "main",
-          data: JSON.parse(value),
-          updated_by: userData?.user?.id ?? null,
-        });
-      if (error) {
-        console.error("[dashboard] save error:", error.message);
-        return false;
-      }
-      return true;
-    } catch (e) {
-      console.error("[dashboard] save failed:", e.message);
-      return false;
     }
   },
 };
@@ -457,9 +441,8 @@ function StyreportalCore() {
 
   const loadData = async () => {
     try {
-      const r = await storage.get(STORAGE_KEY);
-      if (r && r.value) {
-        const loaded = JSON.parse(r.value);
+      const loaded = await storage.get();
+      if (loaded) {
         setData({
           ...FALLBACK_SEED,
           ...loaded,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Lock, Mail, User, ArrowRight } from "lucide-react";
 import { COL } from "../data";
@@ -13,12 +13,13 @@ export default function Login() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Already signed in? Send to appropriate landing page.
-  if (!authLoading && user) {
+  // Already signed in? Redirect to appropriate landing page.
+  // Lives in useEffect to avoid side effects during render.
+  useEffect(() => {
+    if (authLoading || !user) return;
     const dest = role === "admin" ? "/admin" : "/styreportal";
     navigate(location.state?.from || dest, { replace: true });
-    return null;
-  }
+  }, [authLoading, user, role, navigate, location.state]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

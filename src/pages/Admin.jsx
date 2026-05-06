@@ -377,43 +377,51 @@ const SEED = {
   ],
 };
 
-const STORAGE_KEY = "bn_dashboard_v1";
+// Storage shim mot Supabase singleton-rad (public.dashboard_state, id='main').
+// LockManager-deadlock håndteres på klient-init i src/lib/supabase.js (noOpLock),
+// så vi trenger ikke wrappe getSession/getUser her — kun en kort timeout som
+// safety net mot nettverkshenging.
+const TIMEOUT_MS = 5000;
+const withTimeout = (p, label) =>
+  Promise.race([
+    p,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout ${label} (${TIMEOUT_MS}ms)`)), TIMEOUT_MS)
+    ),
+  ]);
+
 const storage = {
   get: async () => {
     try {
-      // Refresh sesjonen for å unngå at gammel token henger
-      await supabase.auth.getSession();
-      const queryPromise = supabase
-        .from("dashboard_state")
-        .select("data")
-        .eq("id", "main")
-        .maybeSingle();
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout (10s)")), 10000)
+      const { data, error } = await withTimeout(
+        supabase
+          .from("dashboard_state")
+          .select("data")
+          .eq("id", "main")
+          .maybeSingle(),
+        "load"
       );
-      const result = await Promise.race([queryPromise, timeoutPromise]);
-      const { data, error } = result;
       if (error) {
         console.error("[dashboard] load error:", error.message);
         return null;
       }
       if (!data) return null;
-      return { value: JSON.stringify(data.data) };
+      return data.data;
     } catch (e) {
       console.error("[dashboard] load failed:", e.message);
       return null;
     }
   },
-  set: async (_key, value) => {
+  set: async (value, userId) => {
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const { error } = await supabase
-        .from("dashboard_state")
-        .upsert({
+      const { error } = await withTimeout(
+        supabase.from("dashboard_state").upsert({
           id: "main",
-          data: JSON.parse(value),
-          updated_by: userData?.user?.id ?? null,
-        });
+          data: value,
+          updated_by: userId ?? null,
+        }),
+        "save"
+      );
       if (error) {
         console.error("[dashboard] save error:", error.message);
         return false;
@@ -478,9 +486,8 @@ function AdminDashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await storage.get(STORAGE_KEY);
-        if (r && r.value) {
-          const loaded = JSON.parse(r.value);
+        const loaded = await storage.get();
+        if (loaded) {
           // Migrate: ensure new fields exist on legacy data
           const migrated = {
             ...SEED,
@@ -513,7 +520,7 @@ function AdminDashboard() {
     setSaveStatus("saving");
     const t = setTimeout(async () => {
       try {
-        await storage.set(STORAGE_KEY, JSON.stringify(data));
+        await storage.set(data, profile?.id);
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 1500);
       } catch {
@@ -521,7 +528,7 @@ function AdminDashboard() {
       }
     }, 400);
     return () => clearTimeout(t);
-  }, [data, loading]);
+  }, [data, loading, profile?.id]);
 
   if (loading || !data) {
     return (
