@@ -511,8 +511,13 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           /* Compact cover hero on print */
           .cover-hero { padding: 2.5rem !important; min-height: auto !important; }
           .cover-hero h1 { font-size: 3rem !important; }
-          /* Back cover — visible only in print */
-          .report-back-cover { display: block !important; }
+          /* Back cover — visible only in print, as flex band */
+          .report-back-cover { 
+            display: flex !important; 
+            align-items: center;
+            justify-content: space-between;
+            gap: 2rem;
+          }
           /* Hide ALL header/nav/footer at any nesting depth, EXCEPT marked report elements */
           body header:not([data-report="keep"]),
           body nav:not([data-report="keep"]),
@@ -822,10 +827,6 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             marginTop: "2.5rem",
             breakInside: "avoid",
             pageBreakInside: "avoid",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "2rem",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
