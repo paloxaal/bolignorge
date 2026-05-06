@@ -1277,6 +1277,7 @@ function DashboardPage({ data, setData, totals }) {
         </div>
         <NAVCard totals={totals} />
         <CapitalSummary financials={data.financials || []} />
+        <IRRSection financials={data.financials} totals={totals} />
       </section>
     </div>
   );
@@ -1351,6 +1352,345 @@ function NAVRow({ label, value, width, color }) {
   );
 }
 
+// ---------------- IRR-BEREGNING ----------------
+// Newton-Raphson IRR. cashflows[i] er kontantstrømmen i år i (år 0 = første post).
+function computeIRR(cashflows, guess = 0.15) {
+  if (!cashflows || cashflows.length < 2) return null;
+  // Sjekk at det finnes både positive og negative tall, ellers er IRR udefinert
+  const hasNeg = cashflows.some((c) => c < 0);
+  const hasPos = cashflows.some((c) => c > 0);
+  if (!hasNeg || !hasPos) return null;
+
+  const npv = (rate) =>
+    cashflows.reduce(
+      (sum, cf, t) => sum + cf / Math.pow(1 + rate, t),
+      0
+    );
+  const dnpv = (rate) =>
+    cashflows.reduce(
+      (sum, cf, t) => sum - (t * cf) / Math.pow(1 + rate, t + 1),
+      0
+    );
+
+  let r = guess;
+  for (let i = 0; i < 200; i++) {
+    const v = npv(r);
+    if (Math.abs(v) < 1e-7) return r;
+    const d = dnpv(r);
+    if (!isFinite(d) || Math.abs(d) < 1e-12) break;
+    const next = r - v / d;
+    // Hold IRR i et fornuftig intervall
+    if (next < -0.99) {
+      r = -0.99;
+    } else if (next > 10) {
+      r = 10;
+    } else {
+      r = next;
+    }
+  }
+  return isFinite(r) ? r : null;
+}
+
+// Bygger IRR-kontantstrøm-tabell og verdier for visning
+function buildIRRModel(financials, navTerminal) {
+  if (!financials || financials.length === 0) return null;
+  const sorted = [...financials].sort((a, b) => a.year - b.year);
+  const startYear = sorted[0].year;
+  const startEK = Number(sorted[0].ek) || 0;
+  if (startEK <= 0) return null;
+
+  // Siste år med faktisk data (ikke projected) gir terminal-anker.
+  // Vi inkluderer ALLE år (også projected) i kontantstrøm slik at planlagt utbytte teller med.
+  const endYear = sorted[sorted.length - 1].year;
+
+  // Kontantstrøm:
+  //   t=0 (startYear): -startEK  (innsats)
+  //   t=1..N-1:         +utbytte (per år)
+  //   t=N (endYear):    +utbytte_endYear + terminalverdi (NAV nå)
+  const cashflows = [];
+  const rows = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const f = sorted[i];
+    const t = f.year - startYear;
+    const dividend = Number(f.dividend) || 0;
+    let cf;
+    let note;
+    if (i === 0) {
+      cf = -startEK;
+      note = "Innsats — bokført EK ved start";
+    } else if (i === sorted.length - 1) {
+      cf = dividend + (Number(navTerminal) || 0);
+      note = `Utbytte ${dividend ? fmtNOK(dividend) + " m" : "0"} + terminalverdi (NAV)`;
+    } else {
+      cf = dividend;
+      note = dividend > 0 ? "Utbytte" : "—";
+    }
+    cashflows[t] = cf;
+    rows.push({ year: f.year, t, cf, dividend, note, projected: f.projected });
+  }
+  // Fyll evt. tomme år (hvis det er hull) med 0
+  for (let t = 0; t <= endYear - startYear; t++) {
+    if (cashflows[t] === undefined) cashflows[t] = 0;
+  }
+
+  const irr = computeIRR(cashflows);
+  const totalDividend = sorted.reduce(
+    (s, f) => s + (Number(f.dividend) || 0),
+    0
+  );
+  const years = endYear - startYear;
+
+  return {
+    irr,
+    startYear,
+    endYear,
+    startEK,
+    totalDividend,
+    navTerminal: Number(navTerminal) || 0,
+    rows,
+    years,
+    cashflows,
+  };
+}
+
+// IRR-presentasjon (chart + faktablokk + kontantstrøm-tabell)
+function IRRSection({ financials, totals }) {
+  const navTerminal = Number(totals?.nav) || 0;
+  const model = buildIRRModel(financials, navTerminal);
+  if (!model || model.irr === null) return null;
+
+  const irrPct = (model.irr * 100).toFixed(1).replace(".", ",") + " %";
+  const totalCF = model.cashflows.reduce((s, c) => s + c, 0);
+  const moic =
+    model.startEK > 0
+      ? (model.totalDividend + model.navTerminal) / model.startEK
+      : null;
+
+  return (
+    <div
+      className="mt-8 border"
+      style={{ borderColor: COL.border, background: COL.card }}
+    >
+      <div
+        className="px-6 py-4 border-b flex items-baseline justify-between"
+        style={{ borderColor: COL.border, background: COL.paperWarm }}
+      >
+        <div>
+          <div
+            className="text-[10px] tracking-[0.2em] uppercase"
+            style={{ color: COL.muted }}
+          >
+            Egenkapitalavkastning · IRR
+          </div>
+          <h3
+            className="text-lg"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 500 }}
+          >
+            IRR fra {model.startYear}
+          </h3>
+        </div>
+        <div
+          className="text-[11px]"
+          style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            color: COL.muted,
+          }}
+        >
+          {model.startYear} → {model.endYear} ({model.years} år)
+        </div>
+      </div>
+
+      {/* KPI-linje */}
+      <div
+        className="grid grid-cols-4 gap-px px-6 py-5"
+        style={{ background: COL.borderSoft }}
+      >
+        <div className="px-4 py-3" style={{ background: COL.card }}>
+          <div
+            className="text-[10px] tracking-[0.18em] uppercase mb-1"
+            style={{ color: COL.muted }}
+          >
+            IRR p.a.
+          </div>
+          <div
+            className="text-3xl"
+            style={{
+              fontFamily: "'Fraunces', serif",
+              fontWeight: 500,
+              color: COL.gold,
+            }}
+          >
+            {irrPct}
+          </div>
+        </div>
+        <div className="px-4 py-3" style={{ background: COL.card }}>
+          <div
+            className="text-[10px] tracking-[0.18em] uppercase mb-1"
+            style={{ color: COL.muted }}
+          >
+            Innsats {model.startYear}
+          </div>
+          <div
+            className="text-2xl"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 500 }}
+          >
+            {fmtNOK(model.startEK)} m
+          </div>
+        </div>
+        <div className="px-4 py-3" style={{ background: COL.card }}>
+          <div
+            className="text-[10px] tracking-[0.18em] uppercase mb-1"
+            style={{ color: COL.muted }}
+          >
+            Akk. utbytte
+          </div>
+          <div
+            className="text-2xl"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 500 }}
+          >
+            {fmtNOK(model.totalDividend)} m
+          </div>
+        </div>
+        <div className="px-4 py-3" style={{ background: COL.card }}>
+          <div
+            className="text-[10px] tracking-[0.18em] uppercase mb-1"
+            style={{ color: COL.muted }}
+          >
+            Terminalverdi · NAV
+          </div>
+          <div
+            className="text-2xl"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 500 }}
+          >
+            {fmtNOK(model.navTerminal)} m
+          </div>
+          {moic !== null && (
+            <div
+              className="text-[11px] mt-0.5"
+              style={{
+                color: COL.muted,
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            >
+              MOIC: {moic.toFixed(2).replace(".", ",")}×
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Kontantstrøm-tabell */}
+      <div className="px-6 pb-6">
+        <div
+          className="text-[10px] tracking-[0.2em] uppercase mb-2"
+          style={{ color: COL.muted }}
+        >
+          Kontantstrøm (mNOK)
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${COL.border}` }}>
+              {["År", "T", "Kontantstrøm", "Beskrivelse"].map((h, i) => (
+                <th
+                  key={h}
+                  className={`px-3 py-2 text-[10px] tracking-[0.15em] uppercase ${
+                    i === 2 ? "text-right" : "text-left"
+                  }`}
+                  style={{ color: COL.muted }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {model.rows.map((r) => (
+              <tr
+                key={r.year}
+                style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
+              >
+                <td
+                  className="px-3 py-2"
+                  style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                >
+                  {r.year}
+                  {r.projected && (
+                    <span
+                      className="ml-1 text-[10px]"
+                      style={{ color: COL.gold }}
+                    >
+                      *
+                    </span>
+                  )}
+                </td>
+                <td
+                  className="px-3 py-2"
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    color: COL.muted,
+                    fontSize: 12,
+                  }}
+                >
+                  t={r.t}
+                </td>
+                <td
+                  className="px-3 py-2 text-right"
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    color: r.cf < 0 ? COL.burgundy : COL.ink,
+                    fontWeight: r.t === 0 || r.t === model.years ? 600 : 400,
+                  }}
+                >
+                  {r.cf >= 0 ? "+" : ""}
+                  {fmtNOK(r.cf)}
+                </td>
+                <td className="px-3 py-2 text-xs" style={{ color: COL.inkSoft }}>
+                  {r.note}
+                </td>
+              </tr>
+            ))}
+            <tr style={{ borderTop: `2px solid ${COL.ink}` }}>
+              <td
+                className="px-3 py-2 text-[10px] tracking-[0.15em] uppercase"
+                style={{ color: COL.muted }}
+                colSpan={2}
+              >
+                Sum (udiskontert)
+              </td>
+              <td
+                className="px-3 py-2 text-right"
+                style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontWeight: 600,
+                }}
+              >
+                {totalCF >= 0 ? "+" : ""}
+                {fmtNOK(totalCF)}
+              </td>
+              <td
+                className="px-3 py-2 text-[11px]"
+                style={{ color: COL.muted }}
+              >
+                Totalt overskudd over innsats
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div
+          className="mt-3 text-[11px] leading-[1.55]"
+          style={{ color: COL.muted, maxWidth: "75ch" }}
+        >
+          IRR (intern rente) er den årlige avkastningen som gjør netto nåverdi
+          av kontantstrømmen lik null. Modellen bruker bokført EK ved {model.startYear} som
+          innsats, faktiske og planlagte utbytter som kontantstrøm, og dagens
+          NAV (verdijustert egenkapital, inkl. merverdier i tomter) som
+          terminalverdi i siste år. * = foreløpig år / projeksjon.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------------- CAPITAL SUMMARY ----------------
 function CapitalSummary({ financials }) {
   if (!financials || financials.length === 0) return null;
@@ -1376,6 +1716,42 @@ function CapitalSummary({ financials }) {
   const aar = last.year - first.year;
   const cagr = aar > 0 && startEK > 0 ? Math.pow(totalReturn, 1 / aar) - 1 : 0;
   const utdGrad = akkResultat > 0 ? (akkUtbytte / akkResultat) * 100 : 0;
+
+  // IRR: bygge cash flow-serie fra startår til siste bekreftet år.
+  // t=0: -startEK (kapital innskutt). t=k: +utbytte. Siste år: +utbytte + sluttEK (terminalverdi).
+  const cashflows = (() => {
+    const cfs = [-startEK];
+    for (let y = first.year + 1; y <= last.year; y++) {
+      const row = financials.find((f) => f.year === y);
+      const div = Number(row?.dividend) || 0;
+      cfs.push(div);
+    }
+    cfs[cfs.length - 1] += sluttEK; // terminalverdi i siste år
+    return cfs;
+  })();
+
+  const computeIRR = (cfs, guess = 0.15) => {
+    if (cfs.length < 2) return null;
+    // Newton-Raphson
+    let r = guess;
+    for (let i = 0; i < 200; i++) {
+      let npv = 0;
+      let dnpv = 0;
+      for (let t = 0; t < cfs.length; t++) {
+        const denom = Math.pow(1 + r, t);
+        npv += cfs[t] / denom;
+        dnpv += -t * cfs[t] / (denom * (1 + r));
+      }
+      if (Math.abs(dnpv) < 1e-12) break;
+      const newR = r - npv / dnpv;
+      if (Math.abs(newR - r) < 1e-8) return newR;
+      r = newR;
+      if (r <= -0.99) r = -0.99; // unngå divergens
+    }
+    return r;
+  };
+
+  const irr = computeIRR(cashflows);
 
   // Build chart data: cumulative dividends + EK + cumulative result for each year
   let accRes = 0;
@@ -1431,7 +1807,7 @@ function CapitalSummary({ financials }) {
 
       {/* Stats row */}
       <div
-        className="grid grid-cols-2 md:grid-cols-4 gap-px"
+        className="grid grid-cols-2 md:grid-cols-5 gap-px"
         style={{ background: COL.border }}
       >
         <CapStat
@@ -1453,6 +1829,11 @@ function CapitalSummary({ financials }) {
           label="Total avkastning"
           value={`${totalReturn.toFixed(2)}×`}
           sub={`CAGR: ${fmtPct(cagr * 100)}`}
+        />
+        <CapStat
+          label="IRR"
+          value={irr !== null ? fmtPct(irr * 100) : "—"}
+          sub={`${first.year}→${last.year}, EK + utbytter`}
           accent
         />
       </div>
@@ -1527,7 +1908,7 @@ function CapitalSummary({ financials }) {
         className="px-7 py-3 text-[11px] border-t"
         style={{ color: COL.muted, borderColor: COL.borderSoft }}
       >
-        Total avkastning = (slutt-EK + akk. utbytte) / start-EK. EK reflekterer kapital som er bundet i selskapet, akk. utbytte den som er delt ut til eier(e).
+        IRR beregnes med start-EK som negativ kontantstrøm i {first.year}, årlige utbytter som positive kontantstrømmer, og slutt-EK i {last.year} som terminalverdi. Total avkastning = (slutt-EK + akk. utbytte) / start-EK. EK reflekterer kapital som er bundet i selskapet; akk. utbytte den som er delt ut til eier(e).
       </div>
     </div>
   );
@@ -3081,6 +3462,8 @@ function FinancialsPage({ data, setData, totals }) {
           * Foreløpig år. Utbytte føres i året det er utbetalt — kolonnen «Fra år» angir hvilket regnskapsår utbyttet stammer fra (utbetales typisk året etter regnskapsåret). Utdelingsgrad akk. = akk. utbytte / akk. resultat t.o.m. rapportert år.
         </div>
       </section>
+
+      <IRRSection financials={data.financials} totals={totals} />
     </div>
   );
 }
@@ -3549,9 +3932,88 @@ function ReportPage({ data, totals }) {
             </table>
           </section>
 
+          {/* Pipeline — flyttet før NAV */}
+          {(data.pipeline?.length || 0) > 0 && (
+            <section>
+              <SectionHeader num="05" title="Pipeline · case i vurdering" />
+              <table className="w-full text-sm mt-4">
+                <thead>
+                  <tr style={{ borderBottom: `2px solid ${COL.ink}` }}>
+                    {["Pri", "Prosjekt", "Lokasjon", "Størrelse", "Status", "Kommentar"].map(
+                      (h) => (
+                        <th
+                          key={h}
+                          className="px-3 py-2.5 text-[10px] tracking-[0.15em] uppercase text-left"
+                          style={{ color: COL.muted }}
+                        >
+                          {h}
+                        </th>
+                      )
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.pipeline
+                    .filter(
+                      (c) =>
+                        c.status === "Pågående" || c.status === "Avventende"
+                    )
+                    .sort((a, b) => (a.priority || 99) - (b.priority || 99))
+                    .map((c) => (
+                      <tr
+                        key={c.id}
+                        style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
+                      >
+                        <td className="px-3 py-2.5">
+                          <PriorityBadge priority={c.priority} />
+                        </td>
+                        <td
+                          className="px-3 py-2.5"
+                          style={{
+                            fontFamily: "'Fraunces', serif",
+                            fontSize: 13,
+                            fontWeight: 500,
+                          }}
+                        >
+                          {c.name}
+                        </td>
+                        <td
+                          className="px-3 py-2.5 text-xs"
+                          style={{ color: COL.inkSoft }}
+                        >
+                          {c.location}
+                        </td>
+                        <td
+                          className="px-3 py-2.5 text-xs"
+                          style={{
+                            color: COL.gold,
+                            fontFamily: "'JetBrains Mono', monospace",
+                          }}
+                        >
+                          {c.size || "—"}
+                        </td>
+                        <td
+                          className="px-3 py-2.5 text-xs"
+                          style={{ color: COL.inkSoft }}
+                        >
+                          {c.status}
+                        </td>
+                        <td
+                          className="px-3 py-2.5 text-xs"
+                          style={{ color: COL.muted, maxWidth: 250 }}
+                        >
+                          {c.comment || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+
           {/* Verdijustert egenkapital */}
           <section>
-            <SectionHeader num="05" title="Verdijustert egenkapital" />
+            <SectionHeader num="06" title="Verdijustert egenkapital" />
             <div className="mt-4 grid grid-cols-3 gap-px" style={{ background: COL.border }}>
               <ReportKPI label="Bokført EK" value={fmtNOK(totals.bokfortEK) + " m"} />
               <ReportKPI label="Merverdier eiendom" value={fmtNOK(totals.merverdier) + " m"} />
@@ -3566,10 +4028,10 @@ function ReportPage({ data, totals }) {
             </div>
           </section>
 
-          {/* Selskapstall — EK-binding chart + tabell */}
+          {/* Selskapstall — EK-binding chart + tabell + IRR */}
           {(data.financials?.length || 0) > 0 && (
             <section>
-              <SectionHeader num="06" title="Selskapstall" />
+              <SectionHeader num="07" title="Selskapstall" />
               <div className="mt-4">
                 <CapitalSummary financials={data.financials || []} />
               </div>
@@ -3670,85 +4132,7 @@ function ReportPage({ data, totals }) {
                   resultat t.o.m. rapportert år.
                 </div>
               </div>
-            </section>
-          )}
-
-          {/* Pipeline */}
-          {(data.pipeline?.length || 0) > 0 && (
-            <section>
-              <SectionHeader num="07" title="Pipeline · case i vurdering" />
-              <table className="w-full text-sm mt-4">
-                <thead>
-                  <tr style={{ borderBottom: `2px solid ${COL.ink}` }}>
-                    {["Pri", "Prosjekt", "Lokasjon", "Størrelse", "Status", "Kommentar"].map(
-                      (h) => (
-                        <th
-                          key={h}
-                          className="px-3 py-2.5 text-[10px] tracking-[0.15em] uppercase text-left"
-                          style={{ color: COL.muted }}
-                        >
-                          {h}
-                        </th>
-                      )
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.pipeline
-                    .filter(
-                      (c) =>
-                        c.status === "Pågående" || c.status === "Avventende"
-                    )
-                    .sort((a, b) => (a.priority || 99) - (b.priority || 99))
-                    .map((c) => (
-                      <tr
-                        key={c.id}
-                        style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
-                      >
-                        <td className="px-3 py-2.5">
-                          <PriorityBadge priority={c.priority} />
-                        </td>
-                        <td
-                          className="px-3 py-2.5"
-                          style={{
-                            fontFamily: "'Fraunces', serif",
-                            fontSize: 13,
-                            fontWeight: 500,
-                          }}
-                        >
-                          {c.name}
-                        </td>
-                        <td
-                          className="px-3 py-2.5 text-xs"
-                          style={{ color: COL.inkSoft }}
-                        >
-                          {c.location}
-                        </td>
-                        <td
-                          className="px-3 py-2.5 text-xs"
-                          style={{
-                            color: COL.gold,
-                            fontFamily: "'JetBrains Mono', monospace",
-                          }}
-                        >
-                          {c.size || "—"}
-                        </td>
-                        <td
-                          className="px-3 py-2.5 text-xs"
-                          style={{ color: COL.inkSoft }}
-                        >
-                          {c.status}
-                        </td>
-                        <td
-                          className="px-3 py-2.5 text-xs"
-                          style={{ color: COL.muted, maxWidth: 250 }}
-                        >
-                          {c.comment || "—"}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+              <IRRSection financials={data.financials} totals={totals} />
             </section>
           )}
         </div>
