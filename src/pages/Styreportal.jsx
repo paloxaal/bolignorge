@@ -672,19 +672,27 @@ function StyreportalCore() {
 
 // ---------------- COMPUTED ----------------
 function computeTotals(data) {
-  const proj = data.projects;
+  const proj = data.projects || [];
   const bnShare = (p) => {
     const ps = Number(p.partnerShare);
     return isNaN(ps) ? 1 : (100 - ps) / 100;
   };
-  const omsetningTotal = proj.reduce((s, p) => s + (Number(p.omsetning) || 0), 0);
   const omsetning = proj.reduce(
+    (s, p) => s + (Number(p.omsetning) || 0),
+    0
+  );
+  const omsetningJustert = proj.reduce(
     (s, p) => s + (Number(p.omsetning) || 0) * bnShare(p),
     0
   );
   const db = proj.reduce((s, p) => s + (Number(p.db) || 0), 0);
+  const dbJustert = proj.reduce(
+    (s, p) => s + (Number(p.db) || 0) * bnShare(p),
+    0
+  );
   const units = proj.reduce((s, p) => s + (Number(p.units) || 0), 0);
-  const margin = omsetning > 0 ? (db / omsetning) * 100 : 0;
+  const margin =
+    omsetningJustert > 0 ? (dbJustert / omsetningJustert) * 100 : 0;
   const merverdier = proj.reduce(
     (s, p) => s + (Number(p.merverdiTomt) || 0),
     0
@@ -697,8 +705,9 @@ function computeTotals(data) {
   const nav = bokfortEK + merverdier;
   return {
     omsetning,
-    omsetningTotal,
+    omsetningJustert,
     db,
+    dbJustert,
     units,
     margin,
     merverdier,
@@ -749,21 +758,24 @@ function DashboardPage({ data, totals }) {
         <KPICard
           label="Total porteføljeverdi"
           value={fmtMrd(totals.omsetning)}
-          sub={`Total prosjektscope: ${fmtMrd(totals.omsetningTotal)}`}
+          sub={`Justert for eierandeler: ${fmtMrd(totals.omsetningJustert)}`}
           accent
         />
-        <KPICard label="Dekningsbidrag" value={fmtMrd(totals.db)} />
-        <KPICard label="DB-margin" value={fmtPct(totals.margin)} />
+        <KPICard
+          label="Dekningsbidrag"
+          value={fmtMrd(totals.db)}
+          sub={`Justert for eierandeler: ${fmtMrd(totals.dbJustert)}`}
+        />
+        <KPICard
+          label="DB-margin"
+          value={fmtPct(totals.margin)}
+          sub="Justert for eierandeler"
+        />
         <KPICard
           label="Boliger under utvikling"
           value={fmtNOK(totals.units) + "+"}
+          sub="Total prosjektscope"
         />
-      </div>
-      <div
-        className="-mt-9 text-[10px] tracking-[0.15em] uppercase text-center"
-        style={{ color: COL.muted }}
-      >
-        Tall justert for eierandeler
       </div>
 
       {/* Verdijustert egenkapital */}
@@ -998,6 +1010,23 @@ function CapitalSummary({ financials }) {
   const cagr = aar > 0 && startEK > 0 ? Math.pow(totalReturn, 1 / aar) - 1 : 0;
   const utdGrad = akkResultat > 0 ? (akkUtbytte / akkResultat) * 100 : 0;
 
+  let accRes = 0;
+  let accDiv = 0;
+  const chartData = financials.map((f) => {
+    if (f.result !== null && f.result !== undefined && !isNaN(f.result))
+      accRes += Number(f.result);
+    if (f.dividend !== null && f.dividend !== undefined && !isNaN(f.dividend))
+      accDiv += Number(f.dividend);
+    return {
+      year: f.year,
+      "Bokført EK": f.ek,
+      "Akk. resultat": accRes,
+      "Akk. utbytte": accDiv,
+      Årsresultat: f.result,
+      Utbytte: f.dividend,
+    };
+  });
+
   return (
     <div
       className="border"
@@ -1031,11 +1060,15 @@ function CapitalSummary({ financials }) {
           {first.year} → {last.year} ({aar} år)
         </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: COL.border }}>
+
+      <div
+        className="grid grid-cols-2 md:grid-cols-4 gap-px"
+        style={{ background: COL.border }}
+      >
         <CapStat
           label="Bokført EK"
           value={fmtNOK(sluttEK) + " m"}
-          sub={`Startleverket ${first.year}: ${fmtNOK(startEK)} m`}
+          sub={`Start ${first.year}: ${fmtNOK(startEK)} m`}
         />
         <CapStat
           label="Akk. utbytte"
@@ -1045,7 +1078,7 @@ function CapitalSummary({ financials }) {
         <CapStat
           label="Akk. resultat"
           value={fmtNOK(akkResultat) + " m"}
-          sub={`= EK + utbytte − inj.`}
+          sub={`Snitt: ${fmtNOK(akkResultat / Math.max(aar, 1))} m/år`}
         />
         <CapStat
           label="Total avkastning"
@@ -1054,11 +1087,77 @@ function CapitalSummary({ financials }) {
           accent
         />
       </div>
+
+      <div
+        className="px-7 py-6 border-t"
+        style={{ borderColor: COL.borderSoft }}
+      >
+        <div
+          className="text-[10px] tracking-[0.2em] uppercase mb-3"
+          style={{ color: COL.muted }}
+        >
+          År for år — resultat, utbytte og EK (mNOK)
+        </div>
+        <ResponsiveContainer width="100%" height={260}>
+          <ComposedChart
+            data={chartData}
+            margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+          >
+            <CartesianGrid stroke={COL.borderSoft} vertical={false} />
+            <XAxis
+              dataKey="year"
+              stroke={COL.muted}
+              fontSize={11}
+              tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+            />
+            <YAxis
+              stroke={COL.muted}
+              fontSize={11}
+              tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+            />
+            <Tooltip
+              contentStyle={{
+                background: COL.paper,
+                border: `1px solid ${COL.border}`,
+                fontSize: 12,
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            />
+            <Legend wrapperStyle={{ fontSize: 11 }} iconType="square" />
+            <Bar dataKey="Årsresultat" fill={COL.ink} barSize={14} />
+            <Bar dataKey="Utbytte" fill={COL.goldSoft} barSize={14} />
+            <Line
+              type="monotone"
+              dataKey="Bokført EK"
+              stroke={COL.sage}
+              strokeWidth={2}
+              dot={{ r: 3, fill: COL.sage }}
+            />
+            <Line
+              type="monotone"
+              dataKey="Akk. utbytte"
+              stroke={COL.gold}
+              strokeWidth={1.5}
+              strokeDasharray="2 4"
+              dot={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="Akk. resultat"
+              stroke={COL.burgundy}
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              dot={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
       <div
         className="px-7 py-3 text-[11px] border-t"
         style={{ color: COL.muted, borderColor: COL.borderSoft }}
       >
-        Total avkastning = (slutt-EK + akk. utbytte) / start-EK. Reflekterer både innestående EK og kapital som er delt ut til eier(e).
+        Total avkastning = (slutt-EK + akk. utbytte) / start-EK. EK reflekterer kapital som er bundet i selskapet, akk. utbytte den som er delt ut til eier(e).
       </div>
     </div>
   );
