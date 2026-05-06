@@ -807,15 +807,6 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           )}
         </div>
 
-        {/* Footer disclaimer */}
-        <div
-          className="px-10 py-5 border-t text-[10px] tracking-[0.15em] uppercase flex justify-between print:hidden"
-          style={{ borderColor: COL.border, color: COL.muted }}
-        >
-          <span>Konfidensielt — kun for styret i {data.meta.companyName}</span>
-          <span>Styreportal · v{data.meta.reportYear}</span>
-        </div>
-
         {/* Back cover footer band for print — only visible in print mode */}
         <div
           data-report="keep"
