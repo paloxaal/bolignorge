@@ -860,6 +860,29 @@ function DashboardPage({ data, setData, totals }) {
     setEditingMarket(true);
   };
 
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Filen må være et bilde (PNG, JPG, etc).");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      const ok = confirm(
+        `Filen er ${(file.size / 1024).toFixed(0)} KB. Anbefalt maks ~500 KB for rask innlasting. Legg den inn likevel?`
+      );
+      if (!ok) {
+        e.target.value = "";
+        return;
+      }
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => setImageUrlDraft(ev.target?.result || "");
+    reader.onerror = () => alert("Klarte ikke å lese filen.");
+    reader.readAsDataURL(file);
+    e.target.value = ""; // reset så samme fil kan velges igjen
+  };
+
   const saveMarket = () => {
     setData((d) => ({
       ...d,
@@ -984,27 +1007,86 @@ function DashboardPage({ data, setData, totals }) {
                 className="block text-[10px] tracking-[0.2em] uppercase mb-2"
                 style={{ color: COL.muted }}
               >
-                Bilde-URL (Eiendom Norge prisstatistikk)
+                Bilde (Eiendom Norge prisstatistikk)
               </label>
+
+              {imageUrlDraft ? (
+                <div className="space-y-2">
+                  <div
+                    className="border p-3"
+                    style={{ borderColor: COL.border, background: COL.paper }}
+                  >
+                    <img
+                      src={imageUrlDraft}
+                      alt="Forhåndsvisning"
+                      className="max-h-40 w-auto"
+                      style={{ display: "block" }}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <label
+                      htmlFor="market-image-upload"
+                      className="cursor-pointer px-3 py-1.5 text-xs border"
+                      style={{ borderColor: COL.border, color: COL.inkSoft }}
+                    >
+                      Bytt bilde
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setImageUrlDraft("")}
+                      className="px-3 py-1.5 text-xs border"
+                      style={{ borderColor: COL.border, color: COL.inkSoft }}
+                    >
+                      Fjern bilde
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <label
+                  htmlFor="market-image-upload"
+                  className="block cursor-pointer border-2 border-dashed p-6 text-center text-sm"
+                  style={{
+                    borderColor: COL.border,
+                    color: COL.muted,
+                    background: COL.paper,
+                  }}
+                >
+                  Klikk for å velge bilde fra Mac
+                  <div
+                    className="text-[11px] mt-1"
+                    style={{ color: COL.muted }}
+                  >
+                    PNG eller JPG. Anbefalt maks ~500 KB.
+                  </div>
+                </label>
+              )}
+
               <input
-                type="text"
-                value={imageUrlDraft}
-                onChange={(e) => setImageUrlDraft(e.target.value)}
-                placeholder="https://… eller data:image/png;base64,…"
-                className="w-full p-3 text-[14px] border"
-                style={{
-                  background: COL.paper,
-                  borderColor: COL.border,
-                  color: COL.inkSoft,
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}
+                id="market-image-upload"
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
               />
-              <div
-                className="text-[11px] mt-1"
-                style={{ color: COL.muted }}
-              >
-                Lim inn URL til bilde, eller en data-URI for å embedde direkte. La stå tom for å skjule bildet.
-              </div>
+
+              <details className="mt-3 text-xs" style={{ color: COL.muted }}>
+                <summary className="cursor-pointer">
+                  Eller lim inn URL / data-URI manuelt
+                </summary>
+                <input
+                  type="text"
+                  value={imageUrlDraft}
+                  onChange={(e) => setImageUrlDraft(e.target.value)}
+                  placeholder="https://… eller data:image/png;base64,…"
+                  className="w-full p-3 text-[12px] border mt-2"
+                  style={{
+                    background: COL.paper,
+                    borderColor: COL.border,
+                    color: COL.inkSoft,
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}
+                />
+              </details>
             </div>
             <div>
               <label
