@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useNavigate, useLocation, Link } from "react-router-dom";
-import { Lock, Mail, ArrowRight } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Lock, Mail, User, ArrowRight } from "lucide-react";
 import { COL } from "../data";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -24,7 +24,13 @@ export default function Login() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const { error: authError } = await signIn(email.trim(), password);
+    // Allow username-only login for board members (no email required).
+    // If the input contains @, treat as full email; otherwise append internal domain.
+    const trimmed = email.trim();
+    const loginIdentifier = trimmed.includes("@")
+      ? trimmed
+      : `${trimmed.toLowerCase()}@bolignorge.local`;
+    const { error: authError } = await signIn(loginIdentifier, password);
     setLoading(false);
     if (authError) {
       setError(authError.message || "Innlogging feilet");
@@ -73,16 +79,16 @@ export default function Login() {
           className="text-[14px] leading-[1.6] mb-8"
           style={{ color: COL.muted }}
         >
-          For administrator og styremedlemmer. Bruk e-postadresse og passord
+          For administrator og styremedlemmer. Bruk brukernavnet og passordet
           du har fått tilsendt.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          <Field label="E-post" icon={<Mail size={14} />}>
+          <Field label="Brukernavn" icon={<User size={14} />}>
             <input
-              type="email"
+              type="text"
               required
-              autoComplete="email"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full bg-transparent outline-none text-[15px]"
@@ -141,24 +147,6 @@ export default function Login() {
             {!loading && <ArrowRight size={13} />}
           </button>
         </form>
-
-        <div
-          className="mt-8 pt-6 border-t text-[11px]"
-          style={{
-            borderColor: COL.borderSoft,
-            color: COL.muted,
-            fontFamily: "'JetBrains Mono', monospace",
-          }}
-        >
-          Trenger du hjelp? Kontakt{" "}
-          <Link
-            to="/kontakt"
-            className="bn-link"
-            style={{ color: COL.ink, fontWeight: 600 }}
-          >
-            pal.oxaal@bolignorge.no
-          </Link>
-        </div>
       </div>
     </div>
   );
