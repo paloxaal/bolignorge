@@ -1209,14 +1209,14 @@ function DashboardPage({ data, setData, totals }) {
         <div className="grid grid-cols-4 gap-px" style={{ background: COL.border }}>
           <KPICard
             label="Total porteføljeverdi"
-            value={fmtMrd(totals.omsetning)}
-            sub={`Justert for eierandeler: ${fmtMrd(totals.omsetningJustert)}`}
+            value={fmtMrd(totals.omsetningJustert)}
+            sub={`Brutto: ${fmtMrd(totals.omsetning)}`}
             accent
           />
           <KPICard
             label="Dekningsbidrag"
-            value={fmtMrd(totals.db)}
-            sub={`Justert for eierandeler: ${fmtMrd(totals.dbJustert)}`}
+            value={fmtMrd(totals.dbJustert)}
+            sub={`Brutto: ${fmtMrd(totals.db)}`}
           />
           <KPICard
             label="DB-margin"
@@ -1613,7 +1613,7 @@ function IRRSection({ financials, totals }) {
       </div>
 
       {/* Kontantstrøm-tabell */}
-      <div className="px-6 pb-6">
+      <div className="px-6 pb-6 no-break" data-no-break>
         <div
           className="text-[10px] tracking-[0.2em] uppercase mb-2"
           style={{ color: COL.muted }}
@@ -3666,6 +3666,16 @@ function ReportPage({ data, totals }) {
           section { break-inside: avoid; page-break-inside: avoid; }
           h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
           img { break-inside: avoid; page-break-inside: avoid; }
+          table, .no-break, [data-no-break] {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          /* Hide site chrome at any nesting depth */
+          body header:not([data-report="keep"]),
+          body nav:not([data-report="keep"]),
+          body footer:not([data-report="keep"]) {
+            display: none !important;
+          }
         }
       `}</style>
 
@@ -3893,8 +3903,16 @@ function ReportPage({ data, totals }) {
           <section>
             <SectionHeader num="01" title="Nøkkeltall" />
             <div className="grid grid-cols-4 gap-px mt-6" style={{ background: COL.border }}>
-              <ReportKPI label="Total porteføljeverdi" value={fmtMrd(totals.omsetning)} />
-              <ReportKPI label="Dekningsbidrag" value={fmtMrd(totals.db)} />
+              <ReportKPI
+                label="Total porteføljeverdi"
+                value={fmtMrd(totals.omsetningJustert)}
+                sub={`Brutto: ${fmtMrd(totals.omsetning)}`}
+              />
+              <ReportKPI
+                label="Dekningsbidrag"
+                value={fmtMrd(totals.dbJustert)}
+                sub={`Brutto: ${fmtMrd(totals.db)}`}
+              />
               <ReportKPI label="DB-margin" value={fmtPct(totals.margin)} />
               <ReportKPI label="Boliger u. utvikling" value={fmtNOK(totals.units) + "+"} />
             </div>
@@ -4409,7 +4427,7 @@ function SectionHeader({ num, title }) {
     </div>
   );
 }
-function ReportKPI({ label, value }) {
+function ReportKPI({ label, value, sub }) {
   return (
     <div className="px-5 py-5" style={{ background: COL.paper }}>
       <div
@@ -4429,6 +4447,14 @@ function ReportKPI({ label, value }) {
       >
         {value}
       </div>
+      {sub && (
+        <div
+          className="mt-2 text-[10px]"
+          style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          {sub}
+        </div>
+      )}
     </div>
   );
 }

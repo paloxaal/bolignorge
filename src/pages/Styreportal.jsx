@@ -479,19 +479,20 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           section { break-inside: avoid; page-break-inside: avoid; }
           h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+          /* Tables and table-like containers must not split across pages */
+          table, .no-break, [data-no-break] {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
           /* Compact cover hero on print */
           .cover-hero { padding: 2.5rem !important; min-height: auto !important; }
           .cover-hero h1 { font-size: 3rem !important; }
-          /* Hide common public-site chrome that may wrap the styreportal route */
-          body > header,
-          body > nav,
-          body > footer,
-          [class*="site-header"],
-          [class*="site-nav"],
-          [class*="navbar"],
-          [class*="public-nav"],
-          [class*="MainNav"],
-          [class*="Header"]:not([class*="cover"]) {
+          /* Back cover — visible only in print */
+          .report-back-cover { display: block !important; }
+          /* Hide ALL header/nav/footer at any nesting depth, EXCEPT marked report elements */
+          body header:not([data-report="keep"]),
+          body nav:not([data-report="keep"]),
+          body footer:not([data-report="keep"]) {
             display: none !important;
           }
         }
@@ -622,6 +623,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
       <main className="flex-1 min-w-0">
         {page !== "dashboard" && (
           <header
+            data-report="keep"
             className="flex items-center justify-between px-10 py-5 border-b print:hidden"
             style={{ borderColor: COL.border }}
           >
@@ -676,13 +678,66 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
         </div>
 
         {/* Footer disclaimer */}
-        <footer
-          className="px-10 py-5 border-t text-[10px] tracking-[0.15em] uppercase flex justify-between"
+        <div
+          className="px-10 py-5 border-t text-[10px] tracking-[0.15em] uppercase flex justify-between print:hidden"
           style={{ borderColor: COL.border, color: COL.muted }}
         >
           <span>Konfidensielt — kun for styret i {data.meta.companyName}</span>
           <span>Styreportal · v{data.meta.reportYear}</span>
-        </footer>
+        </div>
+
+        {/* Back cover for print — only visible in print mode */}
+        <div
+          data-report="keep"
+          className="hidden print:block report-back-cover"
+          style={{
+            background: COL.ink,
+            color: COL.paper,
+            padding: "5rem 4rem",
+            marginTop: "2rem",
+            breakBefore: "page",
+            pageBreakBefore: "always",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ marginBottom: "2.5rem", display: "flex", justifyContent: "center" }}>
+            <BNLogo light />
+          </div>
+          <div
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontSize: "2rem",
+              fontWeight: 400,
+              letterSpacing: "-0.01em",
+              marginBottom: "1.5rem",
+            }}
+          >
+            {data.meta?.companyName}
+          </div>
+          <div
+            style={{
+              fontSize: "10px",
+              letterSpacing: "0.25em",
+              textTransform: "uppercase",
+              opacity: 0.6,
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+          >
+            Konfidensielt — kun for interne formål
+          </div>
+          <div
+            style={{
+              fontSize: "10px",
+              letterSpacing: "0.25em",
+              textTransform: "uppercase",
+              opacity: 0.5,
+              fontFamily: "'JetBrains Mono', monospace",
+              marginTop: "0.75rem",
+            }}
+          >
+            Månedsrapport · {data.meta?.reportPeriod} · {data.meta?.reportYear}
+          </div>
+        </div>
       </main>
 
       {viewingProject && (
@@ -886,12 +941,14 @@ function DashboardPage({ data, totals }) {
         >
           <KPICard
             label="Total porteføljeverdi"
-            value={fmtMrd(totals.omsetning)}
+            value={fmtMrd(totals.omsetningJustert)}
+            sub={`Brutto: ${fmtMrd(totals.omsetning)}`}
             accent
           />
           <KPICard
             label="Dekningsbidrag"
-            value={fmtMrd(totals.db)}
+            value={fmtMrd(totals.dbJustert)}
+            sub={`Brutto: ${fmtMrd(totals.db)}`}
           />
           <KPICard
             label="DB-margin"
@@ -1652,7 +1709,7 @@ function IRRSection({ financials, totals }) {
           )}
         </div>
       </div>
-      <div className="px-6 pb-6">
+      <div className="px-6 pb-6 no-break" data-no-break>
         <div
           className="text-[10px] tracking-[0.2em] uppercase mb-2"
           style={{ color: COL.muted }}
