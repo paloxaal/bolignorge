@@ -557,7 +557,7 @@ function AdminDashboard() {
   const NAV = [
     { id: "dashboard", label: "Oversikt", icon: LayoutDashboard },
     { id: "portfolio", label: "Portefølje", icon: Building2 },
-    { id: "completed", label: "Ferdigstilte", icon: History },
+    { id: "completed", label: "Tidligere", icon: History },
     { id: "pipeline", label: "Pipeline", icon: Target },
     { id: "financials", label: "Selskapstall", icon: TrendingUp },
     { id: "archive", label: "Arkiv", icon: Archive },
@@ -3751,7 +3751,7 @@ function CompletedProjectsPage() {
   };
 
   const deleteRow = async (id, name) => {
-    if (!confirm(`Slette "${name}" fra ferdigstilte?`)) return;
+    if (!confirm(`Slette "${name}"?`)) return;
     const { error: err } = await supabase
       .from("completed_projects")
       .delete()
@@ -3816,7 +3816,7 @@ function CompletedProjectsPage() {
               letterSpacing: "-0.01em",
             }}
           >
-            Ferdigstilte prosjekter
+            Tidligere prosjekter og eiendommer
           </h2>
         </div>
         <button
@@ -3964,7 +3964,7 @@ function CompletedProjectsPage() {
         ) : rows.length === 0 ? (
           <div className="p-12 text-center" style={{ color: COL.muted }}>
             <History size={28} strokeWidth={1.5} className="mx-auto mb-3 opacity-40" />
-            <div className="text-sm">Ingen ferdigstilte prosjekter ennå.</div>
+            <div className="text-sm">Ingen tidligere prosjekter eller eiendommer ennå.</div>
           </div>
         ) : (
           rows.map((row) => (
