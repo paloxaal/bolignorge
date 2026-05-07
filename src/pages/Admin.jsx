@@ -30,6 +30,7 @@ import {
   ExternalLink,
   FolderOpen,
   Menu,
+  History,
 } from "lucide-react";
 import {
   BarChart,
@@ -556,6 +557,7 @@ function AdminDashboard() {
   const NAV = [
     { id: "dashboard", label: "Oversikt", icon: LayoutDashboard },
     { id: "portfolio", label: "Portefølje", icon: Building2 },
+    { id: "completed", label: "Ferdigstilte", icon: History },
     { id: "pipeline", label: "Pipeline", icon: Target },
     { id: "financials", label: "Selskapstall", icon: TrendingUp },
     { id: "archive", label: "Arkiv", icon: Archive },
@@ -782,6 +784,9 @@ function AdminDashboard() {
               onEdit={setEditingProject}
               onAdd={addProject}
             />
+          )}
+          {page === "completed" && (
+            <CompletedProjectsPage />
           )}
           {page === "pipeline" && (
             <PipelinePage data={data} setData={setData} />
@@ -3681,6 +3686,380 @@ function NumCell({ value, onChange }) {
         color: COL.ink,
       }}
     />
+  );
+}
+
+// ---------------- FERDIGSTILTE PROSJEKTER ----------------
+// Egen Supabase-tabell `completed_projects` med offentlig lese-tilgang
+// så nettsiden (bolignorge.no/prosjekter) leser fra samme kilde.
+function CompletedProjectsPage() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState(null);
+  const [error, setError] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newRow, setNewRow] = useState({
+    year: new Date().getFullYear(),
+    name: "",
+    location: "",
+    units: 0,
+  });
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    const { data, error: err } = await supabase
+      .from("completed_projects")
+      .select()
+      .order("year", { ascending: false })
+      .order("display_order", { ascending: true });
+    if (err) setError(err.message);
+    else setRows(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const updateField = (id, field, value) => {
+    setRows((rs) =>
+      rs.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+    );
+  };
+
+  const persistRow = async (id) => {
+    const row = rows.find((r) => r.id === id);
+    if (!row) return;
+    setSavingId(id);
+    const { error: err } = await supabase
+      .from("completed_projects")
+      .update({
+        year: row.year,
+        name: row.name,
+        location: row.location,
+        units: row.units,
+        display_order: row.display_order,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+    setSavingId(null);
+    if (err) {
+      alert("Klarte ikke å lagre: " + err.message);
+      load();
+    }
+  };
+
+  const deleteRow = async (id, name) => {
+    if (!confirm(`Slette "${name}" fra ferdigstilte?`)) return;
+    const { error: err } = await supabase
+      .from("completed_projects")
+      .delete()
+      .eq("id", id);
+    if (err) {
+      alert("Klarte ikke å slette: " + err.message);
+      return;
+    }
+    load();
+  };
+
+  const addNewRow = async () => {
+    if (!newRow.name.trim() || !newRow.location.trim()) {
+      alert("Prosjektnavn og lokasjon må fylles ut.");
+      return;
+    }
+    const maxOrder =
+      rows.length > 0
+        ? Math.max(...rows.map((r) => r.display_order || 0))
+        : 0;
+    const { error: err } = await supabase
+      .from("completed_projects")
+      .insert({
+        year: newRow.year,
+        name: newRow.name.trim(),
+        location: newRow.location.trim(),
+        units: newRow.units,
+        display_order: maxOrder + 1,
+      });
+    if (err) {
+      alert("Klarte ikke å legge til: " + err.message);
+      return;
+    }
+    setNewRow({
+      year: new Date().getFullYear(),
+      name: "",
+      location: "",
+      units: 0,
+    });
+    setShowAdd(false);
+    load();
+  };
+
+  const inputCls =
+    "w-full px-2 py-1.5 text-sm bg-transparent border-b focus:outline-none focus:border-current";
+
+  return (
+    <div>
+      <div className="mb-6 flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <div
+            className="text-[11px] tracking-[0.2em] uppercase mb-2"
+            style={{ color: COL.muted }}
+          >
+            Historikk · vises på bolignorge.no
+          </div>
+          <h2
+            className="text-3xl"
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Ferdigstilte prosjekter
+          </h2>
+        </div>
+        <button
+          onClick={() => setShowAdd((s) => !s)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded text-sm transition-all"
+          style={{
+            background: showAdd ? COL.paperWarm : COL.ink,
+            color: showAdd ? COL.inkSoft : COL.paper,
+            fontWeight: 600,
+            border: showAdd ? `1px solid ${COL.border}` : "none",
+          }}
+        >
+          {showAdd ? (
+            <>
+              <X size={14} /> Lukk
+            </>
+          ) : (
+            <>
+              <Plus size={14} /> Legg til prosjekt
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Add form */}
+      {showAdd && (
+        <div
+          className="mb-4 p-5 border rounded grid grid-cols-1 md:grid-cols-12 gap-3 items-end"
+          style={{ borderColor: COL.border, background: COL.paperWarm }}
+        >
+          <div className="md:col-span-2">
+            <label
+              className="block text-[10px] tracking-[0.15em] uppercase mb-1"
+              style={{ color: COL.muted }}
+            >
+              År
+            </label>
+            <input
+              type="number"
+              value={newRow.year}
+              onChange={(e) =>
+                setNewRow({ ...newRow, year: parseInt(e.target.value) || 0 })
+              }
+              className="w-full px-3 py-2 border rounded text-sm bg-white"
+              style={{ borderColor: COL.border }}
+            />
+          </div>
+          <div className="md:col-span-4">
+            <label
+              className="block text-[10px] tracking-[0.15em] uppercase mb-1"
+              style={{ color: COL.muted }}
+            >
+              Prosjekt
+            </label>
+            <input
+              type="text"
+              value={newRow.name}
+              onChange={(e) => setNewRow({ ...newRow, name: e.target.value })}
+              placeholder="f.eks. Steinan Park"
+              className="w-full px-3 py-2 border rounded text-sm bg-white"
+              style={{ borderColor: COL.border }}
+            />
+          </div>
+          <div className="md:col-span-3">
+            <label
+              className="block text-[10px] tracking-[0.15em] uppercase mb-1"
+              style={{ color: COL.muted }}
+            >
+              Lokasjon
+            </label>
+            <input
+              type="text"
+              value={newRow.location}
+              onChange={(e) =>
+                setNewRow({ ...newRow, location: e.target.value })
+              }
+              placeholder="f.eks. Trondheim"
+              className="w-full px-3 py-2 border rounded text-sm bg-white"
+              style={{ borderColor: COL.border }}
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label
+              className="block text-[10px] tracking-[0.15em] uppercase mb-1"
+              style={{ color: COL.muted }}
+            >
+              Boliger
+            </label>
+            <input
+              type="number"
+              value={newRow.units}
+              onChange={(e) =>
+                setNewRow({ ...newRow, units: parseInt(e.target.value) || 0 })
+              }
+              className="w-full px-3 py-2 border rounded text-sm bg-white"
+              style={{ borderColor: COL.border }}
+            />
+          </div>
+          <div className="md:col-span-1">
+            <button
+              onClick={addNewRow}
+              className="w-full px-3 py-2 rounded text-sm"
+              style={{
+                background: COL.ink,
+                color: COL.paper,
+                fontWeight: 600,
+              }}
+            >
+              Lagre
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Table */}
+      <div
+        className="border rounded overflow-hidden"
+        style={{ borderColor: COL.border, background: COL.card }}
+      >
+        <div
+          className="hidden md:grid grid-cols-12 gap-3 px-5 py-3 border-b text-[10px] tracking-[0.15em] uppercase"
+          style={{
+            borderColor: COL.border,
+            background: COL.paperWarm,
+            color: COL.muted,
+          }}
+        >
+          <div className="col-span-2">År</div>
+          <div className="col-span-4">Prosjekt</div>
+          <div className="col-span-3">Lokasjon</div>
+          <div className="col-span-2 text-right">Boliger</div>
+          <div className="col-span-1"></div>
+        </div>
+
+        {loading ? (
+          <div className="p-12 text-center" style={{ color: COL.muted }}>
+            <Loader2 size={20} className="animate-spin mx-auto mb-2" />
+            <div className="text-sm">Laster…</div>
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-sm" style={{ color: COL.burgundy }}>
+            <AlertCircle size={20} className="mx-auto mb-2" />
+            {error}
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="p-12 text-center" style={{ color: COL.muted }}>
+            <History size={28} strokeWidth={1.5} className="mx-auto mb-3 opacity-40" />
+            <div className="text-sm">Ingen ferdigstilte prosjekter ennå.</div>
+          </div>
+        ) : (
+          rows.map((row) => (
+            <div
+              key={row.id}
+              className="grid grid-cols-12 gap-3 px-5 py-3 border-b items-center hover:bg-black/[0.015] transition-colors"
+              style={{ borderColor: COL.borderSoft }}
+            >
+              <div className="col-span-12 md:col-span-2">
+                <input
+                  type="number"
+                  value={row.year}
+                  onChange={(e) =>
+                    updateField(row.id, "year", parseInt(e.target.value) || 0)
+                  }
+                  onBlur={() => persistRow(row.id)}
+                  className={inputCls}
+                  style={{
+                    borderColor: COL.borderSoft,
+                    color: COL.gold,
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}
+                />
+              </div>
+              <div className="col-span-12 md:col-span-4">
+                <input
+                  type="text"
+                  value={row.name}
+                  onChange={(e) =>
+                    updateField(row.id, "name", e.target.value)
+                  }
+                  onBlur={() => persistRow(row.id)}
+                  className={inputCls}
+                  style={{
+                    borderColor: COL.borderSoft,
+                    fontFamily: "'Playfair Display', serif",
+                    fontSize: "1rem",
+                    color: COL.ink,
+                  }}
+                />
+              </div>
+              <div className="col-span-8 md:col-span-3">
+                <input
+                  type="text"
+                  value={row.location}
+                  onChange={(e) =>
+                    updateField(row.id, "location", e.target.value)
+                  }
+                  onBlur={() => persistRow(row.id)}
+                  className={inputCls}
+                  style={{ borderColor: COL.borderSoft, color: COL.inkSoft }}
+                />
+              </div>
+              <div className="col-span-3 md:col-span-2 md:text-right">
+                <input
+                  type="number"
+                  value={row.units}
+                  onChange={(e) =>
+                    updateField(row.id, "units", parseInt(e.target.value) || 0)
+                  }
+                  onBlur={() => persistRow(row.id)}
+                  className={inputCls + " md:text-right"}
+                  style={{
+                    borderColor: COL.borderSoft,
+                    color: COL.gold,
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}
+                />
+              </div>
+              <div className="col-span-1 flex justify-end items-center gap-1">
+                {savingId === row.id && (
+                  <Loader2 size={14} className="animate-spin" style={{ color: COL.muted }} />
+                )}
+                <button
+                  onClick={() => deleteRow(row.id, row.name)}
+                  className="p-2 rounded"
+                  style={{ color: COL.burgundy }}
+                  title="Slett"
+                >
+                  <Trash2 size={15} strokeWidth={1.75} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div
+        className="mt-4 text-[11px]"
+        style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
+      >
+        Endringer lagres automatisk når du forlater feltet. Listen sorteres etter år
+        (nyeste først).
+      </div>
+    </div>
   );
 }
 
