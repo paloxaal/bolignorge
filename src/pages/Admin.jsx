@@ -4068,6 +4068,7 @@ const ARCHIVE_CATEGORIES = [
   { id: "manedsrapport", label: "Månedsrapporter", singular: "Månedsrapport" },
   { id: "styregrunnlag", label: "Styregrunnlag", singular: "Styregrunnlag" },
   { id: "protokoll", label: "Protokoller", singular: "Protokoll" },
+  { id: "arsregnskap", label: "Årsregnskap", singular: "Årsregnskap" },
 ];
 
 function slugify(s) {
@@ -4687,6 +4688,16 @@ function ReportPage({ data, totals }) {
           table, .no-break, [data-no-break] {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+          }
+          /* Each project block must stay together — heading + image + facts */
+          .project-block {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          /* Cap project images so they don't push content off page */
+          .project-block img {
+            max-height: 9cm !important;
+            object-fit: cover;
           }
           /* IRR section is tall — always force new page so it stays whole */
           .irr-section {
@@ -5315,7 +5326,7 @@ function ProjectByProjectSection({ data, num }) {
           return (
             <div
               key={p.id}
-              className="pb-10"
+              className="pb-10 project-block"
               style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
             >
               {/* Header: name + location */}

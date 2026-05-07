@@ -493,6 +493,16 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
+          /* Each project block must stay together — heading + image + facts */
+          .project-block {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          /* Cap project images so they don't push content off page */
+          .project-block img {
+            max-height: 9cm !important;
+            object-fit: cover;
+          }
           /* IRR section is tall — always force new page so it stays whole */
           .irr-section {
             break-before: page !important;
@@ -820,7 +830,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             pageBreakInside: "avoid",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", flexShrink: 0 }}>
             <BNLogo light height={28} />
             <div
               style={{
@@ -828,6 +838,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
                 fontSize: "1.1rem",
                 fontWeight: 400,
                 letterSpacing: "-0.01em",
+                whiteSpace: "nowrap",
               }}
             >
               {data.meta?.companyName}
@@ -1388,7 +1399,7 @@ function ProjectByProjectSection({ data, num }) {
           return (
             <div
               key={p.id}
-              className="pb-10"
+              className="pb-10 project-block"
               style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
             >
               {/* Header: name + location */}
@@ -2955,6 +2966,7 @@ const ARCHIVE_CATEGORIES = [
   { id: "manedsrapport", label: "Månedsrapporter", singular: "Månedsrapport" },
   { id: "styregrunnlag", label: "Styregrunnlag", singular: "Styregrunnlag" },
   { id: "protokoll", label: "Protokoller", singular: "Protokoll" },
+  { id: "arsregnskap", label: "Årsregnskap", singular: "Årsregnskap" },
 ];
 
 function formatBytes(b) {
