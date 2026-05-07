@@ -4093,6 +4093,7 @@ function ArkivPage({ data, canEdit }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
   const [error, setError] = useState(null);
 
   const loadDocs = async () => {
@@ -4192,18 +4193,33 @@ function ArkivPage({ data, canEdit }) {
             })}
           </div>
           {canEdit && (
-            <button
-              onClick={() => setShowUpload(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded text-sm transition-all"
-              style={{
-                background: COL.ink,
-                color: COL.paper,
-                fontWeight: 600,
-              }}
-            >
-              <Upload size={14} strokeWidth={2} />
-              Last opp
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowBulk(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded text-sm transition-all border"
+                style={{
+                  borderColor: COL.border,
+                  color: COL.inkSoft,
+                  fontWeight: 500,
+                }}
+                title="Last opp flere PDF-er på én gang med auto-parsing av filnavn"
+              >
+                <FolderOpen size={14} strokeWidth={2} />
+                Bulk-import
+              </button>
+              <button
+                onClick={() => setShowUpload(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded text-sm transition-all"
+                style={{
+                  background: COL.ink,
+                  color: COL.paper,
+                  fontWeight: 600,
+                }}
+              >
+                <Upload size={14} strokeWidth={2} />
+                Last opp
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -4306,6 +4322,17 @@ function ArkivPage({ data, canEdit }) {
           onClose={() => setShowUpload(false)}
           onUploaded={() => {
             setShowUpload(false);
+            loadDocs();
+          }}
+        />
+      )}
+      {showBulk && (
+        <ArkivBulkUploadModal
+          defaultCategory={activeCat}
+          projects={data.projects || []}
+          onClose={() => setShowBulk(false)}
+          onUploaded={() => {
+            setShowBulk(false);
             loadDocs();
           }}
         />
@@ -4599,6 +4626,388 @@ function ArkivUploadModal({ defaultCategory, projects, onClose, onUploaded }) {
               </>
             )}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Auto-parse archive filename → title, period, document_date
+// Examples:
+//   "Månedsrapport April 4.5.2020.pdf"  → "Månedsrapport April 2020", "April 2020", 2020-05-04
+//   "Månedsrapport Mars 2.4.2020.pdf"   → "Månedsrapport Mars 2020", "Mars 2020", 2020-04-02
+//   "Månedsrapport Oktober Bolig Norge 9.11.21.pdf" → "Månedsrapport Oktober 2021", "Oktober 2021", 2021-11-09
+function parseArchiveFilename(filename) {
+  const cleaned = filename.replace(/\.pdf$/i, "");
+  const monthRe = /\b(januar|februar|mars|april|mai|juni|juli|august|september|oktober|november|desember)\b/i;
+  const monthMatch = cleaned.match(monthRe);
+  const month = monthMatch ? monthMatch[1].toLowerCase() : "";
+  const monthCap = month ? month.charAt(0).toUpperCase() + month.slice(1) : "";
+
+  const yearMatch = cleaned.match(/\b(20\d{2})\b/);
+  const explicitYear = yearMatch ? parseInt(yearMatch[1]) : null;
+
+  const dateMatch = cleaned.match(/(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?/);
+  let pubYear = null;
+  let pubDate = "";
+  if (dateMatch) {
+    const dd = parseInt(dateMatch[1]);
+    const mm = parseInt(dateMatch[2]);
+    if (dateMatch[3]) {
+      const yy = dateMatch[3];
+      pubYear = yy.length === 2 ? 2000 + parseInt(yy) : parseInt(yy);
+      pubDate = `${pubYear}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    }
+  }
+
+  const year = explicitYear || pubYear || "";
+  const period = year ? `${monthCap} ${year}` : monthCap;
+  const title = `Månedsrapport ${period}`.trim();
+  return { title, period, document_date: pubDate };
+}
+
+function ArkivBulkUploadModal({ defaultCategory, projects, onClose, onUploaded }) {
+  const [items, setItems] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [globalCategory, setGlobalCategory] = useState(defaultCategory);
+
+  const handleFilesSelected = (e) => {
+    const files = Array.from(e.target.files || []);
+    const parsed = files
+      .filter((f) => f.type === "application/pdf" && f.size <= 50 * 1024 * 1024)
+      .map((file) => {
+        const meta = parseArchiveFilename(file.name);
+        return {
+          file,
+          title: meta.title || file.name.replace(/\.pdf$/i, ""),
+          period: meta.period,
+          document_date: meta.document_date,
+          project_ref: "",
+          status: "pending", // pending | uploading | done | failed
+          error: null,
+        };
+      });
+    setItems(parsed);
+    e.target.value = "";
+  };
+
+  const updateItem = (idx, patch) =>
+    setItems((items) =>
+      items.map((it, i) => (i === idx ? { ...it, ...patch } : it))
+    );
+
+  const removeItem = (idx) =>
+    setItems((items) => items.filter((_, i) => i !== idx));
+
+  const handleUploadAll = async () => {
+    setUploading(true);
+    const { data: userData } = await supabase.auth.getUser();
+
+    for (let i = 0; i < items.length; i++) {
+      // re-read latest items state to get any user edits
+      let it;
+      setItems((curr) => {
+        it = curr[i];
+        return curr.map((x, idx) => (idx === i ? { ...x, status: "uploading" } : x));
+      });
+
+      // wait one tick so React commits the status update
+      await new Promise((r) => setTimeout(r, 10));
+
+      const item = it;
+      if (!item) continue;
+
+      try {
+        if (!item.title.trim()) throw new Error("Tittel er tom");
+
+        const id = crypto.randomUUID();
+        const path = `${globalCategory}/${id}-${slugify(item.title)}.pdf`;
+
+        const { error: upErr } = await supabase.storage
+          .from("arkiv")
+          .upload(path, item.file, {
+            contentType: "application/pdf",
+            upsert: false,
+          });
+        if (upErr) throw upErr;
+
+        const { error: dbErr } = await supabase
+          .from("archive_documents")
+          .insert({
+            id,
+            category: globalCategory,
+            title: item.title.trim(),
+            period: item.period?.trim() || null,
+            document_date: item.document_date || null,
+            project_ref: item.project_ref || null,
+            file_path: path,
+            file_name: item.file.name,
+            file_size: item.file.size,
+            uploaded_by: userData?.user?.id || null,
+          });
+        if (dbErr) {
+          await supabase.storage.from("arkiv").remove([path]);
+          throw dbErr;
+        }
+
+        updateItem(i, { status: "done" });
+      } catch (err) {
+        updateItem(i, { status: "failed", error: err?.message || String(err) });
+      }
+    }
+
+    setUploading(false);
+  };
+
+  const allDone = items.length > 0 && items.every((it) => it.status === "done");
+  const successCount = items.filter((it) => it.status === "done").length;
+  const failCount = items.filter((it) => it.status === "failed").length;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(14,26,43,0.55)" }}
+      onClick={uploading ? undefined : onClose}
+    >
+      <div
+        className="w-full max-w-4xl border rounded shadow-xl flex flex-col"
+        style={{ background: COL.paper, borderColor: COL.border, maxHeight: "90vh" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0"
+          style={{ borderColor: COL.border, background: COL.paperWarm }}
+        >
+          <h3
+            className="text-lg"
+            style={{ fontFamily: "'Playfair Display', serif", fontWeight: 500 }}
+          >
+            Bulk-opplasting
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-black/10"
+            disabled={uploading}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="px-6 py-4 border-b flex items-center gap-4" style={{ borderColor: COL.border }}>
+          <label
+            className="text-[11px] tracking-[0.15em] uppercase"
+            style={{ color: COL.muted }}
+          >
+            Type for alle
+          </label>
+          <select
+            value={globalCategory}
+            onChange={(e) => setGlobalCategory(e.target.value)}
+            className="px-3 py-2 border rounded text-sm bg-white"
+            style={{ borderColor: COL.border }}
+            disabled={uploading || items.length > 0}
+          >
+            {ARCHIVE_CATEGORIES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.singular}
+              </option>
+            ))}
+          </select>
+          {items.length === 0 && (
+            <label
+              className="ml-auto px-4 py-2 rounded text-sm cursor-pointer flex items-center gap-2"
+              style={{
+                background: COL.ink,
+                color: COL.paper,
+                fontWeight: 600,
+              }}
+            >
+              <Upload size={14} /> Velg PDF-er
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                multiple
+                onChange={handleFilesSelected}
+                className="hidden"
+              />
+            </label>
+          )}
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {items.length === 0 ? (
+            <div className="text-center py-12" style={{ color: COL.muted }}>
+              <Upload size={28} strokeWidth={1.5} className="mx-auto mb-3 opacity-40" />
+              <div className="text-sm">
+                Velg en eller flere PDF-er. Tittel og dato auto-utfylles fra filnavn der det er mulig.
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {items.map((item, idx) => (
+                <div
+                  key={idx}
+                  className="border rounded p-3 grid grid-cols-12 gap-2 items-center"
+                  style={{
+                    borderColor:
+                      item.status === "done"
+                        ? COL.gold
+                        : item.status === "failed"
+                          ? COL.burgundy
+                          : COL.borderSoft,
+                    background:
+                      item.status === "done"
+                        ? "rgba(166,124,82,0.05)"
+                        : item.status === "failed"
+                          ? "rgba(139,46,58,0.05)"
+                          : COL.paperWarm,
+                  }}
+                >
+                  <div className="col-span-12 md:col-span-1 flex items-center justify-center">
+                    {item.status === "done" ? (
+                      <Check size={18} style={{ color: COL.gold }} />
+                    ) : item.status === "failed" ? (
+                      <AlertCircle size={18} style={{ color: COL.burgundy }} />
+                    ) : item.status === "uploading" ? (
+                      <Loader2 size={18} className="animate-spin" style={{ color: COL.muted }} />
+                    ) : (
+                      <FileText size={18} style={{ color: COL.muted }} />
+                    )}
+                  </div>
+                  <div className="col-span-12 md:col-span-4">
+                    <input
+                      type="text"
+                      value={item.title}
+                      onChange={(e) => updateItem(idx, { title: e.target.value })}
+                      placeholder="Tittel"
+                      className="w-full px-2 py-1.5 border rounded text-sm bg-white"
+                      style={{ borderColor: COL.borderSoft, fontWeight: 600 }}
+                      disabled={uploading || item.status === "done"}
+                    />
+                    <div
+                      className="text-[10px] mt-1 truncate"
+                      style={{
+                        color: COL.muted,
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}
+                      title={item.file.name}
+                    >
+                      {item.file.name} · {formatBytes(item.file.size)}
+                    </div>
+                  </div>
+                  <div className="col-span-6 md:col-span-3">
+                    <input
+                      type="text"
+                      value={item.period}
+                      onChange={(e) => updateItem(idx, { period: e.target.value })}
+                      placeholder="Periode"
+                      className="w-full px-2 py-1.5 border rounded text-sm bg-white"
+                      style={{ borderColor: COL.borderSoft }}
+                      disabled={uploading || item.status === "done"}
+                    />
+                  </div>
+                  <div className="col-span-6 md:col-span-2">
+                    <input
+                      type="date"
+                      value={item.document_date}
+                      onChange={(e) => updateItem(idx, { document_date: e.target.value })}
+                      className="w-full px-2 py-1.5 border rounded text-sm bg-white"
+                      style={{ borderColor: COL.borderSoft }}
+                      disabled={uploading || item.status === "done"}
+                    />
+                  </div>
+                  <div className="col-span-10 md:col-span-1">
+                    {item.status === "failed" && (
+                      <div
+                        className="text-[10px] truncate"
+                        style={{ color: COL.burgundy }}
+                        title={item.error}
+                      >
+                        {item.error}
+                      </div>
+                    )}
+                  </div>
+                  <div className="col-span-2 md:col-span-1 flex justify-end">
+                    {item.status === "pending" && !uploading && (
+                      <button
+                        onClick={() => removeItem(idx)}
+                        className="p-1.5 rounded"
+                        style={{ color: COL.muted }}
+                        title="Fjern fra liste"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div
+          className="px-6 py-4 border-t flex items-center justify-between flex-shrink-0"
+          style={{ borderColor: COL.border, background: COL.paperWarm }}
+        >
+          <div className="text-xs" style={{ color: COL.muted }}>
+            {items.length === 0
+              ? ""
+              : allDone
+                ? `${successCount} av ${items.length} lastet opp`
+                : uploading
+                  ? `Laster opp… ${successCount} ferdig${failCount > 0 ? `, ${failCount} feilet` : ""}`
+                  : `${items.length} klare for opplasting`}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              disabled={uploading}
+              className="px-4 py-2 text-sm rounded border"
+              style={{ borderColor: COL.border, color: COL.inkSoft }}
+            >
+              {allDone ? "Lukk" : "Avbryt"}
+            </button>
+            {!allDone && items.length > 0 && (
+              <button
+                onClick={handleUploadAll}
+                disabled={uploading || items.some((it) => !it.title.trim())}
+                className="px-4 py-2 text-sm rounded flex items-center gap-2"
+                style={{
+                  background: COL.ink,
+                  color: COL.paper,
+                  fontWeight: 600,
+                  opacity: uploading ? 0.7 : 1,
+                }}
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Laster opp…
+                  </>
+                ) : (
+                  <>
+                    <Upload size={14} /> Last opp alle ({items.length})
+                  </>
+                )}
+              </button>
+            )}
+            {allDone && (
+              <button
+                onClick={() => {
+                  onUploaded();
+                }}
+                className="px-4 py-2 text-sm rounded flex items-center gap-2"
+                style={{
+                  background: COL.gold,
+                  color: COL.paper,
+                  fontWeight: 600,
+                }}
+              >
+                <Check size={14} /> Ferdig
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
