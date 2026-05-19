@@ -419,21 +419,24 @@ const storage = {
   set: async (_key, value) => {
     try {
       const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user?.id) {
+        return { ok: false, error: "Ikke logget inn (sesjon utløpt)" };
+      }
       const { error } = await supabase
         .from("dashboard_state")
         .upsert({
           id: "main",
           data: JSON.parse(value),
-          updated_by: userData?.user?.id ?? null,
+          updated_by: userData.user.id,
         });
       if (error) {
         console.error("[dashboard] save error:", error.message);
-        return false;
+        return { ok: false, error: error.message };
       }
-      return true;
+      return { ok: true };
     } catch (e) {
       console.error("[dashboard] save failed:", e.message);
-      return false;
+      return { ok: false, error: e.message };
     }
   },
 };
@@ -484,7 +487,8 @@ function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState("dashboard");
   const [editingProject, setEditingProject] = useState(null);
-  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved
+  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
+  const [saveError, setSaveError] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Load from storage on mount
@@ -530,12 +534,14 @@ function AdminDashboard() {
     if (!data || loading) return;
     setSaveStatus("saving");
     const t = setTimeout(async () => {
-      try {
-        await storage.set(STORAGE_KEY, JSON.stringify(data));
+      const result = await storage.set(STORAGE_KEY, JSON.stringify(data));
+      if (result?.ok) {
         setSaveStatus("saved");
+        setSaveError(null);
         setTimeout(() => setSaveStatus("idle"), 1500);
-      } catch {
-        setSaveStatus("idle");
+      } else {
+        setSaveStatus("error");
+        setSaveError(result?.error || "Ukjent feil");
       }
     }, 400);
     return () => clearTimeout(t);
@@ -733,7 +739,7 @@ function AdminDashboard() {
           >
             {NAV.find((n) => n.id === page)?.label}
           </div>
-          <SaveIndicator status={saveStatus} />
+          <SaveIndicator status={saveStatus} error={saveError} />
         </div>
 
         {/* Desktop top bar */}
@@ -760,7 +766,7 @@ function AdminDashboard() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            <SaveIndicator status={saveStatus} />
+            <SaveIndicator status={saveStatus} error={saveError} />
             <span
               className="text-xs"
               style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
@@ -931,8 +937,20 @@ function BNLogo({ light = false, height = 32 }) {
 }
 
 // ---------------- SAVE INDICATOR ----------------
-function SaveIndicator({ status }) {
+function SaveIndicator({ status, error }) {
   if (status === "idle") return null;
+  if (status === "error") {
+    return (
+      <div
+        className="flex items-center gap-1.5 text-[11px]"
+        style={{ color: COL.burgundy }}
+        title={error || "Klarte ikke lagre — sjekk browser-konsoll for detaljer"}
+      >
+        <AlertCircle size={11} />
+        <span style={{ fontWeight: 600 }}>Ikke lagret</span>
+      </div>
+    );
+  }
   return (
     <div
       className="flex items-center gap-1.5 text-[11px]"
@@ -1017,11 +1035,11 @@ function DashboardPage({ data, setData, totals }) {
       },
     };
     // Skriv direkte til Supabase nå (ikke vent på den debounced auto-saven)
-    const ok = await storage.set(STORAGE_KEY, JSON.stringify(newData));
+    const result = await storage.set(STORAGE_KEY, JSON.stringify(newData));
     setSavingMarket(false);
-    if (!ok) {
+    if (!result?.ok) {
       setSaveError(
-        "Klarte ikke lagre. Sjekk konsollen (F12) for detaljer og prøv igjen."
+        `Klarte ikke lagre: ${result?.error || "ukjent feil"}. Sjekk konsollen (F12) for detaljer.`
       );
       return;
     }
