@@ -534,7 +534,15 @@ function AdminDashboard() {
     if (!data || loading) return;
     setSaveStatus("saving");
     const t = setTimeout(async () => {
+      // Snapshot what we're about to save for debugging
+      const projSnapshot = (data.projects || []).map((p) => ({
+        id: p.id,
+        statusShort: p.statusShort,
+        statusLongLen: (p.statusLong || "").length,
+      }));
+      console.log("[autosave] firing — projects snapshot:", projSnapshot);
       const result = await storage.set(STORAGE_KEY, JSON.stringify(data));
+      console.log("[autosave] result:", result);
       if (result?.ok) {
         setSaveStatus("saved");
         setSaveError(null);
@@ -571,10 +579,19 @@ function AdminDashboard() {
   ];
 
   const updateProject = (id, patch) => {
-    setData((d) => ({
-      ...d,
-      projects: d.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)),
-    }));
+    console.log("[updateProject] called with id:", id, "patch keys:", Object.keys(patch || {}));
+    setData((d) => {
+      const found = d.projects.find((p) => p.id === id);
+      if (!found) {
+        console.error("[updateProject] no project found for id:", id, "— available ids:", d.projects.map(p => p.id));
+        return d;
+      }
+      const newProjects = d.projects.map((p) => (p.id === id ? { ...p, ...patch } : p));
+      const updated = newProjects.find((p) => p.id === id);
+      console.log("[updateProject] before:", { statusShort: found.statusShort, statusLong: (found.statusLong || "").slice(0, 50) });
+      console.log("[updateProject] after:", { statusShort: updated.statusShort, statusLong: (updated.statusLong || "").slice(0, 50) });
+      return { ...d, projects: newProjects };
+    });
   };
   const addProject = () => {
     const id = "p_" + Math.random().toString(36).slice(2, 8);
