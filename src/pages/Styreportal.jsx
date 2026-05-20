@@ -896,7 +896,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           .print-only { display: none !important; }
         }
         @media print {
-          /* Default page: A4 with margin + footer */
+          /* DEFAULT PAGE — body content with footer */
           @page {
             size: A4;
             margin: 14mm 12mm 16mm 12mm;
@@ -916,8 +916,9 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
               padding-bottom: 6mm;
             }
           }
-          /* First page (cover): no margin, no footer — full bleed */
-          @page :first {
+          /* COVERPAGE — full-bleed, no margins, no footer */
+          @page coverpage {
+            size: A4;
             margin: 0;
             @bottom-left  { content: ""; }
             @bottom-right { content: ""; }
@@ -940,34 +941,22 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           aside,
           .print\\:hidden { display: none !important; }
 
-          /* Reset layout containers — let content flow at page width */
-          main {
-            padding: 0 !important;
-            margin: 0 !important;
-            display: block !important;
-            width: auto !important;
-            max-width: 100% !important;
-          }
-          html, body {
-            margin: 0 !important;
-            padding: 0 !important;
-            width: auto !important;
-            max-width: 100% !important;
-          }
+          /* Reset main padding so cover can fill */
+          main { padding: 0 !important; margin: 0 !important; background: #F6F1E7 !important; }
 
           /* Show / hide print-only elements */
           .screen-only { display: none !important; }
           .print-only { display: block !important; }
 
-          /* ============ COVER PAGE ============ */
-          /* @page :first removes the footer but Chrome ignores margin
-             overrides inside @page :first, so we size the cover to fit
-             within the standard @page margin (297mm - 14mm - 16mm = 267mm). */
-          .cover-hero {
+          /* ---------- COVER & CLOSING ---------- */
+          .cover-hero,
+          .report-closing {
+            page: coverpage !important;
+            box-sizing: border-box !important;
+            width: 210mm !important;
+            min-height: 297mm !important;
             margin: 0 !important;
             padding: 26mm 22mm 22mm 22mm !important;
-            min-height: calc(297mm - 30mm) !important;
-            box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: space-between !important;
@@ -975,46 +964,24 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             color: #F6F1E7 !important;
             border: none !important;
             border-radius: 0 !important;
+          }
+          .cover-hero {
             break-after: page !important;
             page-break-after: always !important;
+          }
+          .report-closing {
+            break-before: page !important;
+            page-break-before: always !important;
           }
           .cover-hero h1 { font-size: 4.4rem !important; line-height: 1.02 !important; }
           .cover-hero .cover-meta { font-size: 1.65rem !important; }
 
-          /* ============ CLOSING PAGE ============ */
-          /* Closing renders on a normal page (with footer). The dark card
-             sits within the page margin like a framed signoff. */
-          .report-closing {
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: space-between !important;
-            margin: 0 !important;
-            padding: 22mm 20mm !important;
-            min-height: calc(297mm - 30mm) !important;
-            box-sizing: border-box !important;
-            background: #0E1A2B !important;
-            color: #F6F1E7 !important;
-            border: none !important;
-            border-radius: 0 !important;
-            break-before: page !important;
-            page-break-before: always !important;
-          }
+          /* ---------- CONTENT FLOW ---------- */
+          .report-flow { padding: 0 !important; margin: 0 !important; }
+          .report-flow > * + * { margin-top: 9mm !important; }
+          .report-flow > section { break-inside: auto; }
 
-          /* ============ CONTENT FLOW ============ */
-          .report-flow {
-            padding: 0 !important;
-            margin: 0 !important;
-            background: #F6F1E7 !important;
-            max-width: 100% !important;
-          }
-          .report-flow > * + * { margin-top: 7mm !important; }
-          .report-flow > section,
-          .report-flow > div {
-            max-width: 100% !important;
-            box-sizing: border-box !important;
-          }
-
-          /* Section headers stay with their first content */
+          /* Section headers: keep with their first content */
           h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
           p { orphans: 3; widows: 3; }
 
@@ -1024,12 +991,8 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             page-break-inside: avoid !important;
           }
 
-          /* Project blocks — keep header+image+facts together; status text flows */
-          .project-block {
-            break-inside: auto !important;
-            page-break-inside: auto !important;
-            padding-top: 5mm !important;
-          }
+          /* Project block: header+facts together, narrative can flow */
+          .project-block { break-inside: auto !important; page-break-inside: auto !important; }
           .project-block-header {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
@@ -1037,28 +1000,33 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             page-break-after: avoid !important;
           }
           .project-block img {
-            max-height: 6.5cm !important;
+            max-height: 7.5cm !important;
             object-fit: cover;
           }
-          /* padding-top handles spacing — removed sibling margin-top to avoid double */
+          /* Spacing between consecutive projects: tighter */
+          .project-block + .project-block { margin-top: 8mm !important; }
 
-          /* IRR section — its own page, never split */
+          /* IRR section — always new page, never split */
           .irr-section {
             break-before: page !important;
             page-break-before: always !important;
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
-          /* IMPORTANT: capital-summary does NOT have break-inside avoid —
-             it's too tall to fit one page and forcing it leaves empty pages */
+          /* Capital summary stays together */
+          .capital-summary {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
 
-          /* Chapter break — only for Selskapstall section */
+          /* Chapter breaks (§03 Prosjekt for prosjekt, §05 Selskapstall) */
           .chapter-break {
             break-before: page !important;
             page-break-before: always !important;
           }
 
-          /* Recharts fallback — kept for completeness */
+          /* Recharts: constrain in print to avoid overflow; we also render
+             print-safe SVG fallbacks for the most fragile charts */
           .recharts-responsive-container,
           .recharts-wrapper,
           svg.recharts-surface {
@@ -1067,8 +1035,241 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             height: auto !important;
           }
 
+          /* Image rules */
           img { max-width: 100% !important; }
+
+          /* Old back-cover band - hide */
           .report-back-cover { display: none !important; }
+
+          /* ---------- PRINT HARDENING V2 ----------
+             The browser PDF renderer is unforgiving: fixed widths, floats,
+             hidden overflow and no-wrap metadata rows are the main causes of
+             clipped text and large empty pages. These overrides make the
+             report content fluid while keeping only genuinely atomic elements
+             together. */
+          #root,
+          #root > div,
+          main,
+          .report-content,
+          .report-flow {
+            width: 100% !important;
+            max-width: none !important;
+            min-width: 0 !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+          }
+          main,
+          .report-content,
+          .report-flow {
+            display: block !important;
+          }
+          .report-content,
+          .report-flow {
+            font-size: 10pt !important;
+            line-height: 1.45 !important;
+          }
+          .report-content > * + *,
+          .report-flow > * + * {
+            margin-top: 6mm !important;
+          }
+          section,
+          .market-section,
+          .portfolio-section,
+          .pipeline-section {
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+            overflow: visible !important;
+          }
+          .chapter-break {
+            break-before: auto !important;
+            page-break-before: auto !important;
+          }
+          .keep-with-next,
+          h1,
+          h2,
+          h3,
+          h4 {
+            break-after: avoid !important;
+            page-break-after: avoid !important;
+          }
+          .avoid-break,
+          .report-kpi,
+          .project-block-header,
+          .project-image-wrap,
+          .market-visual,
+          .capital-summary {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          /* KPI rows: force compact columns in print instead of Tailwind's
+             screen breakpoints, and allow long labels/subtitles to wrap. */
+          .kpi-grid,
+          .kpi-grid-3,
+          .kpi-grid-4 {
+            display: grid !important;
+            gap: 0 !important;
+            width: 100% !important;
+          }
+          .kpi-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+          .kpi-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+          .report-kpi {
+            min-width: 0 !important;
+            padding: 4.5mm 4mm !important;
+          }
+          .report-kpi-label,
+          .report-kpi-sub {
+            display: block !important;
+            max-width: 100% !important;
+            line-height: 1.25 !important;
+            letter-spacing: 0.12em !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+          }
+          .report-kpi-value {
+            display: block !important;
+            font-size: 22pt !important;
+            line-height: 1 !important;
+            white-space: nowrap !important;
+          }
+
+          /* Market section: no floats in print. Floats fragment poorly and were
+             responsible for text wrapping into clipped/narrow columns. */
+          .market-section {
+            padding: 6mm !important;
+          }
+          .market-layout {
+            overflow: visible !important;
+          }
+          .market-layout.has-image {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1.05fr) minmax(58mm, 0.95fr) !important;
+            gap: 6mm !important;
+            align-items: start !important;
+          }
+          .market-text {
+            min-width: 0 !important;
+            font-size: 10pt !important;
+            line-height: 1.55 !important;
+            overflow-wrap: break-word !important;
+            hyphens: auto !important;
+          }
+          .market-visual {
+            float: none !important;
+            width: auto !important;
+            max-width: none !important;
+            min-width: 0 !important;
+            margin: 0 !important;
+          }
+          .market-visual img {
+            width: 100% !important;
+            max-height: 70mm !important;
+            object-fit: contain !important;
+          }
+
+          /* Project pages: compact media/fact layout, with facts wrapping
+             instead of being cut off at the right edge. */
+          .project-block {
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+            padding-bottom: 5mm !important;
+            overflow: visible !important;
+          }
+          .project-block + .project-block {
+            margin-top: 5mm !important;
+          }
+          .project-media-grid.has-image {
+            display: grid !important;
+            grid-template-columns: minmax(50mm, 72mm) minmax(0, 1fr) !important;
+            gap: 5mm !important;
+            align-items: start !important;
+            margin-bottom: 4mm !important;
+          }
+          .project-media-grid.no-image {
+            display: block !important;
+            margin-bottom: 4mm !important;
+          }
+          .project-image-wrap {
+            overflow: hidden !important;
+          }
+          .project-image-wrap img,
+          .project-block img {
+            width: 100% !important;
+            height: 42mm !important;
+            max-height: 42mm !important;
+            object-fit: cover !important;
+          }
+          .project-facts {
+            min-width: 0 !important;
+            font-size: 8.5pt !important;
+          }
+          .fact-row {
+            display: grid !important;
+            grid-template-columns: 34mm minmax(0, 1fr) !important;
+            gap: 2mm !important;
+            align-items: start !important;
+            padding: 1.15mm 0 !important;
+          }
+          .fact-label {
+            min-width: 0 !important;
+            font-size: 7.3pt !important;
+            line-height: 1.2 !important;
+            letter-spacing: 0.11em !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+          }
+          .fact-value {
+            min-width: 0 !important;
+            max-width: 100% !important;
+            text-align: right !important;
+            font-size: 8pt !important;
+            line-height: 1.25 !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+          }
+          .project-status-label {
+            margin-bottom: 1mm !important;
+            font-size: 7.5pt !important;
+          }
+          .project-status-copy {
+            max-width: none !important;
+            font-size: 9.2pt !important;
+            line-height: 1.45 !important;
+            overflow-wrap: break-word !important;
+            hyphens: auto !important;
+            orphans: 3;
+            widows: 3;
+          }
+
+          /* Tables may span pages, but rows/header should not break. This avoids
+             the blank pages caused by keeping an entire large table together. */
+          table {
+            width: 100% !important;
+            table-layout: fixed !important;
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+            font-size: 8.5pt !important;
+          }
+          thead { display: table-header-group !important; }
+          tfoot { display: table-footer-group !important; }
+          tr {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          th,
+          td {
+            padding: 1.8mm 1.5mm !important;
+            vertical-align: top !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+          }
+          .recharts-responsive-container,
+          .recharts-wrapper,
+          svg.recharts-surface {
+            min-height: 60mm !important;
+            overflow: visible !important;
+          }
         }
       `}</style>
       <div className="hidden md:flex print:hidden items-center" style={{ position: "fixed", top: 0, right: 0, zIndex: 100, padding: "12px 20px", background: COL.paper, borderBottom: `1px solid ${COL.border}`, borderLeft: `1px solid ${COL.border}`, borderBottomLeftRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, gap: 16 }}>
@@ -1655,7 +1856,7 @@ function DashboardPage({ data, totals }) {
       <section>
         <SectionHeader num="01" title="Nøkkeltall" />
         <div
-          className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-px"
+          className="kpi-grid kpi-grid-4 mt-6 grid grid-cols-2 md:grid-cols-4 gap-px"
           style={{ background: COL.border }}
         >
           <KPICard
@@ -1692,10 +1893,10 @@ function DashboardPage({ data, totals }) {
 
       {/* §02 — Marked & outlook + Eiendom Norge prisstatistikk */}
       <section
-        className="border p-8"
+        className="market-section border p-8"
         style={{ borderColor: COL.border, background: COL.card }}
       >
-        <div className="mb-5">
+        <div className="mb-5 keep-with-next">
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-1"
             style={{ color: COL.muted }}
@@ -1713,27 +1914,28 @@ function DashboardPage({ data, totals }) {
             Marked & outlook
           </h2>
         </div>
-        <div className="overflow-hidden">
+        <div className={`market-layout ${data.market?.imageUrl ? "has-image" : ""}`}>
+          <div
+            className="market-text text-[15px] leading-[1.7] whitespace-pre-line"
+            style={{ color: COL.inkSoft }}
+          >
+            {data.market.outlook}
+          </div>
           {data.market?.imageUrl && (
-            <div className="float-right ml-8 mb-4 w-full lg:w-1/2 max-w-[600px]">
+            <div className="market-visual w-full">
               <ShareImageDisplay
                 imageUrl={data.market.imageUrl}
                 imageCaption={data.market.imageCaption}
               />
             </div>
           )}
-          <div
-            className="text-[15px] leading-[1.7] whitespace-pre-line"
-            style={{ color: COL.inkSoft }}
-          >
-            {data.market.outlook}
-          </div>
-          <div className="clear-both" />
         </div>
       </section>
 
       {/* §03 — Prosjekt for prosjekt */}
-      <ProjectByProjectSection data={data} num="03" />
+      <div className="chapter-break">
+        <ProjectByProjectSection data={data} num="03" />
+      </div>
 
       {/* §04 — Prosjektstatus: KPI-kort + omsetning/DB chart */}
       <section className="space-y-6">
@@ -1755,7 +1957,7 @@ function DashboardPage({ data, totals }) {
             Prosjektstatus
           </h2>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: COL.border }}>
+        <div className="kpi-grid kpi-grid-4 grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: COL.border }}>
           <KPICard
             label="Total porteføljeverdi"
             value={fmtMrd(totals.omsetning)}
@@ -1967,17 +2169,17 @@ function ShareImageDisplay({ imageUrl, imageCaption }) {
 function KPICard({ label, value, accent, sub }) {
   return (
     <div
-      className="px-4 py-5 md:px-7 md:py-7 print:py-6 print:px-6"
+      className="report-kpi px-4 py-5 md:px-7 md:py-7 print:py-6 print:px-6"
       style={{ background: COL.card }}
     >
       <div
-        className="text-[9.5px] tracking-[0.22em] uppercase mb-3"
+        className="report-kpi-label text-[9.5px] tracking-[0.22em] uppercase mb-3"
         style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
       >
         {label}
       </div>
       <div
-        className="text-2xl md:text-[34px] print:text-[28px] leading-none"
+        className="report-kpi-value text-2xl md:text-[34px] print:text-[28px] leading-none"
         style={{
           fontFamily: "'Playfair Display', serif",
           fontWeight: 500,
@@ -1989,7 +2191,7 @@ function KPICard({ label, value, accent, sub }) {
       </div>
       {sub && (
         <div
-          className="mt-2.5 text-[9.5px] tracking-[0.18em] uppercase"
+          className="report-kpi-sub mt-2.5 text-[9.5px] tracking-[0.18em] uppercase"
           style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
         >
           {sub}
@@ -2059,12 +2261,12 @@ function ProjectByProjectSection({ data, num }) {
                 <div
                   className={
                     p.imageUrl
-                      ? "grid grid-cols-1 md:grid-cols-2 gap-6 mb-5"
-                      : "mb-5"
+                      ? "project-media-grid has-image grid grid-cols-1 md:grid-cols-2 gap-6 mb-5"
+                      : "project-media-grid no-image mb-5"
                   }
                 >
                   {p.imageUrl && (
-                    <div className="overflow-hidden">
+                    <div className="project-image-wrap overflow-hidden">
                       <img
                         src={p.imageUrl}
                         alt={p.name}
@@ -2077,7 +2279,7 @@ function ProjectByProjectSection({ data, num }) {
                       />
                     </div>
                   )}
-                  <div className="text-xs">
+                  <div className="project-facts text-xs">
                     <FactRow
                       label="Antall boliger"
                       value={total > 0 ? total : "—"}
@@ -2134,15 +2336,15 @@ function ProjectByProjectSection({ data, num }) {
               </div>
 
               {/* Status — full width below */}
-              <div>
+              <div className="project-status">
                 <div
-                  className="text-[9.5px] tracking-[0.22em] uppercase mb-2"
+                  className="project-status-label text-[9.5px] tracking-[0.22em] uppercase mb-2"
                   style={{ color: COL.gold, fontFamily: "'JetBrains Mono', monospace" }}
                 >
                   Status
                 </div>
                 <p
-                  className="text-[14px] leading-[1.7] whitespace-pre-line"
+                  className="project-status-copy text-[14px] leading-[1.7] whitespace-pre-line"
                   style={{ color: COL.inkSoft, maxWidth: "85ch" }}
                 >
                   {p.statusLong || (
@@ -2188,23 +2390,33 @@ function SectionHeader({ num, title }) {
 function FactRow({ label, value }) {
   return (
     <div
-      className="flex items-baseline justify-between gap-4"
+      className="fact-row flex items-baseline justify-between gap-4"
       style={{
         borderBottom: `1px dotted ${COL.borderSoft}`,
         padding: "5px 0",
       }}
     >
       <span
-        className="text-[9.5px] tracking-[0.14em] uppercase"
-        style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
+        className="fact-label text-[9.5px] tracking-[0.14em] uppercase"
+        style={{
+          color: COL.muted,
+          fontFamily: "'JetBrains Mono', monospace",
+          minWidth: 0,
+          overflowWrap: "anywhere",
+        }}
       >
         {label}
       </span>
       <span
+        className="fact-value"
         style={{
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: 12,
           color: COL.ink,
+          minWidth: 0,
+          textAlign: "right",
+          whiteSpace: "normal",
+          overflowWrap: "anywhere",
         }}
       >
         {value}
@@ -3916,7 +4128,7 @@ function FinancialsPage({ data, totals }) {
   return (
     <div className="space-y-10">
       {/* KPI-kort */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: COL.border }}>
+      <div className="kpi-grid kpi-grid-4 grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: COL.border }}>
         <KPICard
           label={`Årsresultat ${latest?.year}${projTag}`}
           value={
