@@ -821,7 +821,7 @@ function AdminDashboard() {
             <ArkivPage data={data} canEdit={true} />
           )}
           {page === "report" && (
-            <ReportPage data={data} totals={totals} />
+            <ReportPage data={data} setData={setData} totals={totals} />
           )}
         </div>
       </main>
@@ -5050,14 +5050,48 @@ function ArkivBulkUploadModal({ defaultCategory, projects, onClose, onUploaded }
 }
 
 // ---------------- REPORT PAGE ----------------
-function ReportPage({ data, totals }) {
+function ReportPage({ data, setData, totals }) {
   const [shareGenerating, setShareGenerating] = useState(false);
   const [shareLink, setShareLink] = useState(null);
   const [shareError, setShareError] = useState(null);
   const [shareCopied, setShareCopied] = useState(false);
+  // Lokalt input state — vil propageres til data.meta ved onBlur
   const [reportLabel, setReportLabel] = useState(
     `${data.meta?.reportPeriod || ""} ${data.meta?.reportYear || ""}`.trim()
   );
+
+  // Synk lokal input hvis data.meta endrer seg utenfra
+  useEffect(() => {
+    setReportLabel(
+      `${data.meta?.reportPeriod || ""} ${data.meta?.reportYear || ""}`.trim()
+    );
+  }, [data.meta?.reportPeriod, data.meta?.reportYear]);
+
+  // Skriv tilbake til data.meta — parser "Periode År" til reportPeriod + reportYear
+  const commitReportLabel = () => {
+    const text = reportLabel.trim();
+    if (!text) return;
+    const yearMatch = text.match(/(\d{4})\s*$/);
+    let newPeriod = text;
+    let newYear = data.meta?.reportYear || new Date().getFullYear();
+    if (yearMatch) {
+      newYear = parseInt(yearMatch[1]);
+      newPeriod = text.replace(/\s*\d{4}\s*$/, "").trim();
+    }
+    if (
+      newPeriod !== data.meta?.reportPeriod ||
+      newYear !== data.meta?.reportYear
+    ) {
+      setData((d) => ({
+        ...d,
+        meta: {
+          ...d.meta,
+          reportPeriod: newPeriod,
+          reportYear: newYear,
+        },
+      }));
+    }
+  };
 
   const handlePrint = () => window.print();
   const handleExport = () => {
@@ -5077,6 +5111,43 @@ function ReportPage({ data, totals }) {
     setShareError(null);
     setShareCopied(false);
     try {
+      // Beregn potensielt oppdatert meta basert på pending label-edit
+      const text = reportLabel.trim();
+      let newPeriod = data.meta?.reportPeriod;
+      let newYear = data.meta?.reportYear;
+      if (text) {
+        const yearMatch = text.match(/(\d{4})\s*$/);
+        if (yearMatch) {
+          newYear = parseInt(yearMatch[1]);
+          newPeriod = text.replace(/\s*\d{4}\s*$/, "").trim();
+        } else {
+          newPeriod = text;
+        }
+      }
+      const metaChanged =
+        newPeriod !== data.meta?.reportPeriod ||
+        newYear !== data.meta?.reportYear;
+
+      // Bygg snapshot med oppdatert meta direkte (uten å vente på setData)
+      const snapshotData = metaChanged
+        ? {
+            ...data,
+            meta: {
+              ...data.meta,
+              reportPeriod: newPeriod,
+              reportYear: newYear,
+            },
+          }
+        : data;
+
+      // Hvis meta endret, propager også til React state så Admin/rapport-UI viser nytt
+      if (metaChanged) {
+        setData((d) => ({
+          ...d,
+          meta: { ...d.meta, reportPeriod: newPeriod, reportYear: newYear },
+        }));
+      }
+
       // 24 bytes = 192 bits entropi → ~32 base64url-tegn
       const bytes = new Uint8Array(24);
       window.crypto.getRandomValues(bytes);
@@ -5087,15 +5158,28 @@ function ReportPage({ data, totals }) {
 
       const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000); // +2 dager
 
+      // Debug
+      console.log("[share] snapshotting — meta:", snapshotData.meta);
+      console.log("[share] snapshotting — projects (first 3):",
+        (snapshotData.projects || []).slice(0, 3).map(p => ({
+          id: p.id,
+          name: p.name,
+          statusShort: p.statusShort,
+          statusLongLen: (p.statusLong || "").length,
+          statusLongPreview: (p.statusLong || "").slice(0, 80),
+        }))
+      );
+
       const { error } = await supabase.from("share_tokens").insert({
         token,
-        snapshot: data,
+        snapshot: snapshotData,
         expires_at: expiresAt.toISOString(),
         report_label: reportLabel || null,
       });
       if (error) throw error;
 
       const url = `${window.location.origin}/styreportal/share/${token}`;
+      console.log("[share] inserted with token:", token, "URL:", url);
       setShareLink({ url, expiresAt });
     } catch (e) {
       console.error("[share] generate failed:", e.message);
@@ -5247,19 +5331,21 @@ function ReportPage({ data, totals }) {
             className="text-[10px] tracking-[0.2em] uppercase whitespace-nowrap"
             style={{ color: COL.muted }}
           >
-            Rapport-merkelapp
+            Rapportperiode
           </label>
           <input
             type="text"
             value={reportLabel}
             onChange={(e) => setReportLabel(e.target.value)}
-            placeholder="F.eks. Mars 2026"
+            onBlur={commitReportLabel}
+            placeholder="F.eks. April – Juni 2026"
             className="flex-1 p-2 text-[13px] border"
             style={{
               background: COL.paper,
               borderColor: COL.border,
               color: COL.inkSoft,
             }}
+            title="Oppdaterer både rapport-overskriften og merkelappen for delingslenken"
           />
         </div>
 
