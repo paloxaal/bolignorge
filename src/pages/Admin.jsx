@@ -5251,10 +5251,25 @@ function ReportPage({ data, setData, totals }) {
           body footer:not([data-report="keep"]) {
             display: none !important;
           }
-          /* Cover gets its own page */
-          .report-cover { break-after: page; page-break-after: always; }
+          /* Cover: own page + fill height */
+          .report-cover {
+            break-after: page;
+            page-break-after: always;
+            min-height: calc(297mm - 2.4cm) !important;
+          }
+          /* Chapter breaks: §03 Prosjekt for prosjekt and §07 Selskapstall start fresh */
+          .chapter-break {
+            break-before: page !important;
+            page-break-before: always !important;
+          }
+          /* Tighter section gaps in print */
+          .report-content > * + * { margin-top: 0.9cm !important; }
           /* Avoid orphans/widows */
           p { orphans: 3; widows: 3; }
+          /* Hide screen-only end footer in print (we use @page footer instead) */
+          .report-screen-footer { display: none !important; }
+          /* Show closing card only in print, not on screen */
+          .report-closing { display: block !important; break-before: page !important; page-break-before: always !important; }
         }
       `}</style>
 
@@ -5457,39 +5472,48 @@ function ReportPage({ data, setData, totals }) {
       >
         {/* Cover */}
         <div
-          className="report-cover px-16 py-20"
+          className="report-cover px-16 py-20 flex flex-col justify-between"
           style={{
             background: COL.ink,
             color: COL.paper,
             minHeight: "320px",
           }}
         >
+          {/* Top: confidentiality + logo */}
           <div className="flex justify-between items-start">
-            <div>
-              <div
-                className="text-[10px] tracking-[0.25em] uppercase"
-                style={{ opacity: 0.6 }}
-              >
-                Konfidensielt — kun for interne formål
-              </div>
-            </div>
-            <div>
-              <BNLogo light height={36} />
-            </div>
-          </div>
-          <div className="mt-24">
             <div
-              className="text-[11px] tracking-[0.3em] uppercase mb-3"
+              className="text-[10px] tracking-[0.25em] uppercase"
+              style={{ opacity: 0.55 }}
+            >
+              Konfidensielt — kun for interne formål
+            </div>
+            <BNLogo light height={36} />
+          </div>
+
+          {/* Middle: title block */}
+          <div className="my-12">
+            <div
+              className="mb-4"
+              style={{
+                width: 48,
+                height: 1,
+                background: COL.goldSoft,
+                opacity: 0.85,
+              }}
+            />
+            <div
+              className="text-[11px] tracking-[0.32em] uppercase mb-4"
               style={{ opacity: 0.7, color: COL.goldSoft }}
             >
               Månedsrapport
             </div>
             <h1
-              className="text-6xl mb-2"
+              className="text-6xl mb-3"
               style={{
                 fontFamily: "'Playfair Display', serif",
                 fontWeight: 400,
                 letterSpacing: "-0.02em",
+                lineHeight: 1.05,
               }}
             >
               {data.meta.reportPeriod}
@@ -5499,11 +5523,27 @@ function ReportPage({ data, setData, totals }) {
               style={{
                 fontFamily: "'Playfair Display', serif",
                 fontWeight: 300,
-                opacity: 0.8,
+                opacity: 0.78,
               }}
             >
               {data.meta.companyName} · {data.meta.reportYear}
             </div>
+          </div>
+
+          {/* Bottom: metadata stamp */}
+          <div
+            className="flex justify-between items-end text-[10px] tracking-[0.2em] uppercase"
+            style={{ opacity: 0.45, fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            <span>
+              Generert ·{" "}
+              {new Date().toLocaleDateString("nb-NO", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </span>
+            <span>Styremateriale</span>
           </div>
         </div>
 
@@ -5573,7 +5613,9 @@ function ReportPage({ data, setData, totals }) {
           </section>
 
           {/* Prosjekt for prosjekt */}
-          <ProjectByProjectSection data={data} num="03" />
+          <div className="chapter-break">
+            <ProjectByProjectSection data={data} num="03" />
+          </div>
 
           {/* Portefølje */}
           <section>
@@ -5755,7 +5797,7 @@ function ReportPage({ data, setData, totals }) {
 
           {/* Selskapstall — EK-binding chart + tabell + IRR */}
           {(data.financials?.length || 0) > 0 && (
-            <section>
+            <section className="chapter-break">
               <SectionHeader num="07" title="Selskapstall" />
               <div className="mt-4">
                 <CapitalSummary financials={data.financials || []} />
@@ -5862,9 +5904,81 @@ function ReportPage({ data, setData, totals }) {
           )}
         </div>
 
-        {/* Footer */}
+        {/* Closing — print-only proper signoff */}
         <div
-          className="px-16 py-5 border-t flex justify-between items-center"
+          className="report-closing px-16 py-20 flex flex-col justify-between"
+          style={{
+            background: COL.ink,
+            color: COL.paper,
+            display: "none",
+          }}
+        >
+          <div className="flex justify-between items-start">
+            <div
+              className="text-[10px] tracking-[0.25em] uppercase"
+              style={{ opacity: 0.55 }}
+            >
+              Rapport slutt
+            </div>
+            <BNLogo light height={32} />
+          </div>
+
+          <div className="my-12">
+            <div
+              className="mb-4"
+              style={{
+                width: 48,
+                height: 1,
+                background: COL.goldSoft,
+                opacity: 0.85,
+              }}
+            />
+            <div
+              className="text-[11px] tracking-[0.32em] uppercase mb-3"
+              style={{ opacity: 0.7, color: COL.goldSoft }}
+            >
+              Månedsrapport · {data.meta.reportPeriod} {data.meta.reportYear}
+            </div>
+            <div
+              className="text-3xl mb-3"
+              style={{
+                fontFamily: "'Playfair Display', serif",
+                fontWeight: 400,
+                letterSpacing: "-0.015em",
+              }}
+            >
+              {data.meta.companyName}
+            </div>
+            <div
+              className="text-[13px] leading-[1.7] max-w-md"
+              style={{ opacity: 0.7 }}
+            >
+              Dette dokumentet er konfidensielt styremateriale og skal ikke
+              videreformidles uten skriftlig samtykke. Tall og prognoser er
+              basert på interne registreringer på rapport-tidspunkt og kan
+              endre seg.
+            </div>
+          </div>
+
+          <div
+            className="flex justify-between items-end text-[10px] tracking-[0.2em] uppercase"
+            style={{ opacity: 0.45, fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            <span>
+              Generert ·{" "}
+              {new Date().toLocaleDateString("nb-NO", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </span>
+            <span>Styremateriale</span>
+          </div>
+        </div>
+
+        {/* Screen-only footer (hidden in print) */}
+        <div
+          className="report-screen-footer px-16 py-5 border-t flex justify-between items-center"
           style={{ borderColor: COL.border, color: COL.muted, fontSize: 11 }}
         >
           <span>Konfidensielt — kun for interne formål</span>
