@@ -630,7 +630,7 @@ function PrintVBarChart({ data, xKey, series, colors, formatValue }) {
   const min = Math.min(0, ...values);
   const range = max - min;
   const chartW = 760;
-  const chartH = 240;
+  const chartH = 190;
   const padL = 44;
   const padR = 18;
   const padT = 14;
@@ -735,7 +735,7 @@ function PrintLineChart({ data, xKey, series, colors, dashes, formatValue }) {
   const min = Math.min(0, ...values);
   const range = max - min;
   const chartW = 760;
-  const chartH = 240;
+  const chartH = 190;
   const padL = 50;
   const padR = 18;
   const padT = 14;
@@ -5774,7 +5774,8 @@ function ReportPage({ data, setData, totals }) {
           .project-block {
             break-inside: auto !important;
             page-break-inside: auto !important;
-            padding-top: 5mm !important;
+            padding-top: 3mm !important;
+            padding-bottom: 4mm !important;
           }
           .project-block-header {
             break-inside: avoid !important;
@@ -5782,20 +5783,21 @@ function ReportPage({ data, setData, totals }) {
             break-after: avoid !important;
             page-break-after: avoid !important;
           }
-          /* Status label + paragraph stay together AND stay with header */
           .project-status {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
-            break-before: avoid !important;
-            page-break-before: avoid !important;
           }
           .project-block p {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
           .project-block img {
-            max-height: 6.5cm !important;
+            max-height: 5cm !important;
             object-fit: cover;
+          }
+          /* Tighter fact rows in print */
+          .fact-row {
+            padding: 3px 0 !important;
           }
 
           /* KPI grids stay together */
@@ -5810,6 +5812,24 @@ function ReportPage({ data, setData, totals }) {
             page-break-inside: avoid !important;
           }
 
+          /* §02 Marked & outlook bordered card stays together */
+          .market-card {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          /* §04 Prosjektstatus chart section — atomic */
+          .chart-section {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          /* CapitalSummary on its own fresh page */
+          .capital-summary {
+            break-before: page !important;
+            page-break-before: always !important;
+          }
+
           .market-text { break-inside: auto; }
 
           /* IRR always new page */
@@ -5819,6 +5839,12 @@ function ReportPage({ data, setData, totals }) {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
+          /* Compress IRR padding so it fits on one page */
+          .irr-section [class*="py-4"] { padding-top: 8px !important; padding-bottom: 8px !important; }
+          .irr-section [class*="py-3"] { padding-top: 6px !important; padding-bottom: 6px !important; }
+          .irr-section [class*="pb-6"] { padding-bottom: 14px !important; }
+          .irr-section table td,
+          .irr-section table th { padding-top: 4px !important; padding-bottom: 4px !important; }
           /* capital-summary intentionally allowed to split across pages */
 
           /* Chapter break only for Selskapstall */
@@ -6337,7 +6363,7 @@ function ReportPage({ data, setData, totals }) {
 
           {/* Selskapstall — EK-binding chart + tabell + IRR */}
           {(data.financials?.length || 0) > 0 && (
-            <section className="chapter-break">
+            <section>
               <SectionHeader num="07" title="Selskapstall" />
               <div className="mt-4">
                 <CapitalSummary financials={data.financials || []} />
@@ -6750,7 +6776,7 @@ function ReportKPI({ label, value, sub }) {
 function FactRow({ label, value }) {
   return (
     <div
-      className="flex justify-between items-baseline gap-4"
+      className="fact-row flex justify-between items-baseline gap-4"
       style={{ borderBottom: `1px dotted ${COL.borderSoft}`, padding: "5px 0" }}
     >
       <span

@@ -607,7 +607,7 @@ function PrintVBarChart({ data, xKey, series, colors, formatValue }) {
   const min = Math.min(0, ...values);
   const range = max - min;
   const chartW = 760;
-  const chartH = 240;
+  const chartH = 190;
   const padL = 44;
   const padR = 18;
   const padT = 14;
@@ -719,7 +719,7 @@ function PrintLineChart({ data, xKey, series, colors, dashes, formatValue }) {
   const min = Math.min(0, ...values);
   const range = max - min;
   const chartW = 760;
-  const chartH = 240;
+  const chartH = 190;
   const padL = 50;
   const padR = 18;
   const padT = 14;
@@ -1031,7 +1031,8 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           .project-block {
             break-inside: auto !important;
             page-break-inside: auto !important;
-            padding-top: 5mm !important;
+            padding-top: 3mm !important;
+            padding-bottom: 4mm !important;
           }
           .project-block-header {
             break-inside: avoid !important;
@@ -1039,20 +1040,22 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             break-after: avoid !important;
             page-break-after: avoid !important;
           }
-          /* Status label + paragraph stay together AND stay with header */
+          /* Status keeps its own paragraph together; relies on header's break-after avoid to stay attached */
           .project-status {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
-            break-before: avoid !important;
-            page-break-before: avoid !important;
           }
           .project-block p {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
           .project-block img {
-            max-height: 6.5cm !important;
+            max-height: 5cm !important;
             object-fit: cover;
+          }
+          /* Tighter fact rows in print to save vertical space */
+          .fact-row {
+            padding: 3px 0 !important;
           }
 
           /* KPI grids stay together as units */
@@ -1067,6 +1070,24 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             page-break-inside: avoid !important;
           }
 
+          /* §02 Marked & outlook bordered card stays together (no border bleed) */
+          .market-card {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          /* §04 Prosjektstatus chart section (bar chart) — own atomic block */
+          .chart-section {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          /* CapitalSummary card starts on a fresh page so it never spans */
+          .capital-summary {
+            break-before: page !important;
+            page-break-before: always !important;
+          }
+
           /* Market outlook text — split allowed but with orphans/widows */
           .market-text {
             break-inside: auto;
@@ -1079,8 +1100,14 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
+          /* Compress IRR padding so it fits on one page */
+          .irr-section [class*="py-4"] { padding-top: 8px !important; padding-bottom: 8px !important; }
+          .irr-section [class*="py-3"] { padding-top: 6px !important; padding-bottom: 6px !important; }
+          .irr-section [class*="pb-6"] { padding-bottom: 14px !important; }
+          .irr-section table td,
+          .irr-section table th { padding-top: 4px !important; padding-bottom: 4px !important; }
           /* IMPORTANT: capital-summary does NOT have break-inside avoid —
-             it's too tall to fit one page and forcing it leaves empty pages */
+             but it now has break-before: page so it starts fresh */
 
           /* Chapter break — only for Selskapstall section */
           .chapter-break {
@@ -1722,7 +1749,7 @@ function DashboardPage({ data, totals }) {
 
       {/* §02 — Marked & outlook + Eiendom Norge prisstatistikk */}
       <section
-        className="border p-8"
+        className="market-card border p-8"
         style={{ borderColor: COL.border, background: COL.card }}
       >
         <div className="mb-5">
@@ -1812,7 +1839,7 @@ function DashboardPage({ data, totals }) {
 
       {/* Chart — del av §02 Prosjektstatus */}
       <section
-        className="border p-8"
+        className="chart-section border p-8"
         style={{ borderColor: COL.border, background: COL.card }}
       >
         <div className="mb-6">
@@ -1880,7 +1907,7 @@ function DashboardPage({ data, totals }) {
       </section>
 
       {/* §05 — Selskapstall: NAV + EK-binding chart */}
-      <section className="space-y-6 chapter-break">
+      <section className="space-y-6">
         <div>
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-1"
@@ -2218,7 +2245,7 @@ function SectionHeader({ num, title }) {
 function FactRow({ label, value }) {
   return (
     <div
-      className="flex items-baseline justify-between gap-4"
+      className="fact-row flex items-baseline justify-between gap-4"
       style={{
         borderBottom: `1px dotted ${COL.borderSoft}`,
         padding: "5px 0",
