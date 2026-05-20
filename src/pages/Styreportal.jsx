@@ -607,7 +607,7 @@ function PrintVBarChart({ data, xKey, series, colors, formatValue }) {
   const min = Math.min(0, ...values);
   const range = max - min;
   const chartW = 760;
-  const chartH = 240;
+  const chartH = 190;
   const padL = 44;
   const padR = 18;
   const padT = 14;
@@ -719,7 +719,7 @@ function PrintLineChart({ data, xKey, series, colors, dashes, formatValue }) {
   const min = Math.min(0, ...values);
   const range = max - min;
   const chartW = 760;
-  const chartH = 240;
+  const chartH = 190;
   const padL = 50;
   const padR = 18;
   const padT = 14;
@@ -1027,39 +1027,12 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             page-break-inside: avoid !important;
           }
 
-          /* §02 Marked & outlook — keep the bordered card together so its
-             frame doesn't get clipped at a page boundary. Tighten padding
-             so the card actually fits on the same page as §01 in print. */
-          .market-section {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-            padding: 6mm 7mm !important;
-          }
-          .market-section h2 { margin-bottom: 0 !important; }
-          .market-section > div:first-of-type { margin-bottom: 4mm !important; }
-          .market-section .market-text { font-size: 13.5px !important; line-height: 1.6 !important; }
-          /* Cap the embedded prisstatistikk image so a tall screenshot
-             doesn't bloat the card past one page. */
-          .market-section img { max-height: 5.5cm !important; }
-
-          /* §04 Prosjektstatus — keep header + KPI grid together, and keep
-             the chart card together (title + bars on the same page). */
-          .prosjektstatus-block {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-          .chart-panel-card {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-
-          /* Project blocks — keep header+image+facts together; status text flows.
-             Tightened paddings so two blocks fit per A4 page where possible. */
+          /* Project blocks — keep header+image+facts together; status text flows */
           .project-block {
             break-inside: auto !important;
             page-break-inside: auto !important;
-            padding-top: 2mm !important;
-            padding-bottom: 3mm !important;
+            padding-top: 3mm !important;
+            padding-bottom: 4mm !important;
           }
           .project-block-header {
             break-inside: avoid !important;
@@ -1067,44 +1040,22 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             break-after: avoid !important;
             page-break-after: avoid !important;
           }
-          /* Tighten internal margins inside the header in print:
-             1) name+location row → small margin under
-             2) image/facts grid → small margin under
-             3) grid column gap reduced from 24px to ~5mm */
-          .project-block-header > div { margin-bottom: 3mm !important; }
-          .project-block-header > div:last-child { margin-bottom: 0 !important; }
-          .project-block-header .grid { gap: 5mm !important; }
-          /* Status label + paragraph stay together AND stay with header */
+          /* Status keeps its own paragraph together; relies on header's break-after avoid to stay attached */
           .project-status {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
-            break-before: avoid !important;
-            page-break-before: avoid !important;
-            margin-top: 3mm !important;
           }
           .project-block p {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
-          .project-status p {
-            line-height: 1.55 !important;
-          }
-          /* Cap image height in print. At ~90mm column width with 16:10
-             aspect ratio the natural height is ~56mm; cap to 4.6cm to free
-             up vertical space for a second block on the same page. */
           .project-block img {
-            max-height: 4.6cm !important;
+            max-height: 5cm !important;
             object-fit: cover;
           }
-          /* Tighten the gap between project blocks in print
-             (overrides Tailwind's print:space-y-6 = 24px) */
-          .report-flow .space-y-8 > * + *,
-          .report-flow .print\\:space-y-6 > * + * {
-            margin-top: 5mm !important;
-          }
-          /* Tighten the mt-6 above the project list */
-          section > .mt-6 {
-            margin-top: 4mm !important;
+          /* Tighter fact rows in print to save vertical space */
+          .fact-row {
+            padding: 3px 0 !important;
           }
 
           /* KPI grids stay together as units */
@@ -1119,21 +1070,44 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             page-break-inside: avoid !important;
           }
 
+          /* §02 Marked & outlook bordered card stays together (no border bleed) */
+          .market-card {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          /* §04 Prosjektstatus chart section (bar chart) — own atomic block */
+          .chart-section {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          /* CapitalSummary card starts on a fresh page so it never spans */
+          .capital-summary {
+            break-before: page !important;
+            page-break-before: always !important;
+          }
+
           /* Market outlook text — split allowed but with orphans/widows */
           .market-text {
             break-inside: auto;
           }
 
-          /* IRR section — must not split, but allowed to flow on the same
-             page as the preceding chart (Akkumulert) if there's room.
-             We removed the forced page break before it. */
+          /* IRR section — its own page, never split */
           .irr-section {
+            break-before: page !important;
+            page-break-before: always !important;
             break-inside: avoid !important;
             page-break-inside: avoid !important;
-            margin-top: 6mm !important;
           }
+          /* Compress IRR padding so it fits on one page */
+          .irr-section [class*="py-4"] { padding-top: 8px !important; padding-bottom: 8px !important; }
+          .irr-section [class*="py-3"] { padding-top: 6px !important; padding-bottom: 6px !important; }
+          .irr-section [class*="pb-6"] { padding-bottom: 14px !important; }
+          .irr-section table td,
+          .irr-section table th { padding-top: 4px !important; padding-bottom: 4px !important; }
           /* IMPORTANT: capital-summary does NOT have break-inside avoid —
-             it's too tall to fit one page and forcing it leaves empty pages */
+             but it now has break-before: page so it starts fresh */
 
           /* Chapter break — only for Selskapstall section */
           .chapter-break {
@@ -1773,11 +1747,9 @@ function DashboardPage({ data, totals }) {
         </div>
       </section>
 
-      {/* §02 — Marked & outlook + Eiendom Norge prisstatistikk.
-          market-section: keeps the bordered card together in print so its
-          frame doesn't get clipped between pages. */}
+      {/* §02 — Marked & outlook + Eiendom Norge prisstatistikk */}
       <section
-        className="border p-8 market-section"
+        className="market-card border p-8"
         style={{ borderColor: COL.border, background: COL.card }}
       >
         <div className="mb-5">
@@ -1820,10 +1792,8 @@ function DashboardPage({ data, totals }) {
       {/* §03 — Prosjekt for prosjekt */}
       <ProjectByProjectSection data={data} num="03" />
 
-      {/* §04 — Prosjektstatus: KPI-kort + omsetning/DB chart.
-          prosjektstatus-block: keeps header + KPI grid as one print unit so
-          the heading doesn't get stranded above a page break. */}
-      <section className="space-y-6 prosjektstatus-block">
+      {/* §04 — Prosjektstatus: KPI-kort + omsetning/DB chart */}
+      <section className="space-y-6">
         <div>
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-1"
@@ -1867,11 +1837,9 @@ function DashboardPage({ data, totals }) {
         </div>
       </section>
 
-      {/* Chart — del av §04 Prosjektstatus.
-          chart-panel-card: outer card flagged as a single chart unit so the
-          @media print rule keeps title + bars on the same page. */}
+      {/* Chart — del av §02 Prosjektstatus */}
       <section
-        className="border p-8 chart-panel-card"
+        className="chart-section border p-8"
         style={{ borderColor: COL.border, background: COL.card }}
       >
         <div className="mb-6">
@@ -1939,7 +1907,7 @@ function DashboardPage({ data, totals }) {
       </section>
 
       {/* §05 — Selskapstall: NAV + EK-binding chart */}
-      <section className="space-y-6 chapter-break">
+      <section className="space-y-6">
         <div>
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-1"
@@ -2277,7 +2245,7 @@ function SectionHeader({ num, title }) {
 function FactRow({ label, value }) {
   return (
     <div
-      className="flex items-baseline justify-between gap-4"
+      className="fact-row flex items-baseline justify-between gap-4"
       style={{
         borderBottom: `1px dotted ${COL.borderSoft}`,
         padding: "5px 0",
