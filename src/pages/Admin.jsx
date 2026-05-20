@@ -31,6 +31,7 @@ import {
   FolderOpen,
   Menu,
   History,
+  Info,
 } from "lucide-react";
 import {
   BarChart,
@@ -5112,7 +5113,7 @@ function ReportPage({ data, setData, totals }) {
         newPeriod !== data.meta?.reportPeriod ||
         newYear !== data.meta?.reportYear;
 
-      // Bygg snapshot med oppdatert meta direkte (uten å vente på setData)
+      // Bygg snapshot med oppdatert meta direkte
       const snapshotData = metaChanged
         ? {
             ...data,
@@ -5124,12 +5125,20 @@ function ReportPage({ data, setData, totals }) {
           }
         : data;
 
-      // Hvis meta endret, propager også til React state så Admin/rapport-UI viser nytt
+      // Propager meta til React state (autosave persisterer)
       if (metaChanged) {
         setData((d) => ({
           ...d,
           meta: { ...d.meta, reportPeriod: newPeriod, reportYear: newYear },
         }));
+      }
+
+      // FORCE-FLUSH: skriv snapshot-data direkte til dashboard_state FØR vi
+      // setter share_token-raden, så vi vet at alle pending edits er persistert.
+      // Eliminerer race-condition mellom 400ms autosave-debounce og link-generering.
+      const flushResult = await storage.set(STORAGE_KEY, JSON.stringify(snapshotData));
+      if (!flushResult?.ok) {
+        throw new Error(`Kunne ikke lagre data før lenke: ${flushResult?.error || "ukjent feil"}`);
       }
 
       // 24 bytes = 192 bits entropi → ~32 base64url-tegn
@@ -5176,29 +5185,52 @@ function ReportPage({ data, setData, totals }) {
       {/* Print stylesheet */}
       <style>{`
         @media print {
-          @page { size: A4; margin: 1.2cm; }
+          @page {
+            size: A4;
+            margin: 1cm;
+            @bottom-right {
+              content: counter(page) " / " counter(pages);
+              font-family: 'JetBrains Mono', monospace;
+              font-size: 9px;
+              color: #6B6452;
+            }
+            @bottom-left {
+              content: "Bolig Norge AS — Konfidensielt";
+              font-family: 'JetBrains Mono', monospace;
+              font-size: 9px;
+              color: #6B6452;
+            }
+          }
           html, body { background: #fafaf7 !important; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           .print\\:hidden { display: none !important; }
           main { padding: 0 !important; }
-          section { break-inside: avoid; page-break-inside: avoid; }
+          /* Tighter side padding in print — match print margins for fuller content width */
+          .report-cover, .report-content { padding-left: 1.2cm !important; padding-right: 1.2cm !important; }
+          .report-cover { padding-top: 2cm !important; padding-bottom: 2cm !important; }
+          .report-content { padding-top: 1cm !important; padding-bottom: 1cm !important; }
+          section { break-inside: auto; }
           h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
-          img { break-inside: avoid; page-break-inside: avoid; }
+          /* Allow project narrative to flow naturally, but keep image+facts together */
+          .project-block { break-inside: auto !important; page-break-inside: auto !important; }
+          .project-block-header {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            break-after: avoid !important;
+            page-break-after: avoid !important;
+          }
+          .project-block img {
+            max-height: 8.5cm !important;
+            object-fit: cover;
+          }
+          /* Cap KPI rows — keep together */
+          .keep-together,
+          table thead,
           table, .no-break, [data-no-break] {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
-          /* Each project block must stay together — heading + image + facts */
-          .project-block {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-          /* Cap project images so they don't push content off page */
-          .project-block img {
-            max-height: 9cm !important;
-            object-fit: cover;
-          }
-          /* IRR section is tall — always force new page so it stays whole */
+          /* IRR section — always new page */
           .irr-section {
             break-before: page !important;
             page-break-before: always !important;
@@ -5213,12 +5245,16 @@ function ReportPage({ data, setData, totals }) {
             width: 100% !important;
             height: auto !important;
           }
-          /* Hide site chrome at any nesting depth */
+          /* Hide site chrome */
           body header:not([data-report="keep"]),
           body nav:not([data-report="keep"]),
           body footer:not([data-report="keep"]) {
             display: none !important;
           }
+          /* Cover gets its own page */
+          .report-cover { break-after: page; page-break-after: always; }
+          /* Avoid orphans/widows */
+          p { orphans: 3; widows: 3; }
         }
       `}</style>
 
@@ -5245,6 +5281,35 @@ function ReportPage({ data, setData, totals }) {
           >
             <FileText size={12} /> Skriv ut / PDF
           </button>
+        </div>
+      </div>
+
+      {/* Print-tips */}
+      <div
+        className="px-4 py-2.5 border-l-2 print:hidden text-[11px] flex items-start gap-2"
+        style={{
+          background: "rgba(168, 132, 62, 0.06)",
+          borderLeftColor: COL.gold,
+          color: COL.inkSoft,
+        }}
+      >
+        <Info size={12} style={{ color: COL.gold, flexShrink: 0, marginTop: 2 }} />
+        <div>
+          <strong style={{ color: COL.ink }}>Print-tips:</strong> I print-dialogen,
+          slå av <em>"Topptekst og bunntekst"</em> (Chrome:{" "}
+          <kbd
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 10,
+              background: COL.paper,
+              padding: "1px 5px",
+              border: `1px solid ${COL.border}`,
+            }}
+          >
+            Flere innstillinger → Topp- og bunntekst
+          </kbd>
+          ) for å fjerne dato/URL fra utskriften. Velg <em>"Lagre som PDF"</em> som
+          mål for ren PDF-eksport.
         </div>
       </div>
 
@@ -5392,7 +5457,7 @@ function ReportPage({ data, setData, totals }) {
       >
         {/* Cover */}
         <div
-          className="px-16 py-20"
+          className="report-cover px-16 py-20"
           style={{
             background: COL.ink,
             color: COL.paper,
@@ -5443,7 +5508,7 @@ function ReportPage({ data, setData, totals }) {
         </div>
 
         {/* Content */}
-        <div className="px-16 py-12 space-y-12">
+        <div className="report-content px-16 py-12 space-y-12">
           {/* Nøkkeltall */}
           <section>
             <SectionHeader num="01" title="Nøkkeltall" />
@@ -5830,94 +5895,99 @@ function ProjectByProjectSection({ data, num }) {
               className="pb-10 project-block"
               style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
             >
-              {/* Header: name + location */}
-              <div className="mb-5">
-                <h4
-                  className="text-2xl mb-1"
-                  style={{
-                    fontFamily: "'Playfair Display', serif",
-                    fontWeight: 500,
-                    color: COL.ink,
-                  }}
-                >
-                  {p.name}
-                </h4>
-                <div className="text-xs" style={{ color: COL.muted }}>
-                  {p.location}
-                </div>
-              </div>
-
-              {/* Image + facts in 2 columns */}
-              <div
-                className={
-                  p.imageUrl
-                    ? "grid grid-cols-1 md:grid-cols-2 gap-6 mb-6"
-                    : "mb-6"
-                }
-              >
-                {p.imageUrl && (
-                  <div className="overflow-hidden">
-                    <img
-                      src={p.imageUrl}
-                      alt={p.name}
-                      className="w-full h-auto"
-                      style={{
-                        display: "block",
-                        aspectRatio: "16 / 10",
-                        objectFit: "cover",
-                      }}
-                    />
+              <div className="project-block-header">
+                {/* Header: name + location */}
+                <div className="mb-5">
+                  <h4
+                    className="text-2xl mb-1"
+                    style={{
+                      fontFamily: "'Playfair Display', serif",
+                      fontWeight: 500,
+                      color: COL.ink,
+                    }}
+                  >
+                    {p.name}
+                  </h4>
+                  <div className="text-xs" style={{ color: COL.muted }}>
+                    {p.location}
                   </div>
-                )}
-                <div className="space-y-1.5 text-xs">
-                  <FactRow
-                    label="Antall boliger"
-                    value={total > 0 ? total : "—"}
-                  />
-                  {sold > 0 && total > 0 && (
-                    <FactRow label="Solgt" value={`${sold} (${pct} %)`} />
+                </div>
+
+                {/* Image + facts in 2 columns */}
+                <div
+                  className={
+                    p.imageUrl
+                      ? "grid grid-cols-1 md:grid-cols-2 gap-6 mb-6"
+                      : "mb-6"
+                  }
+                >
+                  {p.imageUrl && (
+                    <div className="overflow-hidden">
+                      <img
+                        src={p.imageUrl}
+                        alt={p.name}
+                        className="w-full h-auto"
+                        style={{
+                          display: "block",
+                          aspectRatio: "16 / 10",
+                          objectFit: "cover",
+                        }}
+                      />
+                    </div>
                   )}
-                  {sold > 0 && total > 0 && (
-                    <FactRow label="Ledig" value={Math.max(0, total - sold)} />
-                  )}
-                  {p.kvm > 0 && (
-                    <FactRow label="BRA-S" value={fmtNOK(p.kvm) + " kvm"} />
-                  )}
-                  {p.byggestart && (
+                  <div className="space-y-1.5 text-xs">
                     <FactRow
-                      label="Byggeperiode"
-                      value={`${p.byggestart}–${p.byggeslutt || "?"}`}
+                      label="Antall boliger"
+                      value={total > 0 ? total : "—"}
                     />
-                  )}
-                  <FactRow label="Status" value={p.statusShort} />
-                  <FactRow
-                    label="Omsetning"
-                    value={p.omsetning > 0 ? fmtMrd(p.omsetning) : "—"}
-                  />
-                  <FactRow
-                    label="DB"
-                    value={p.db > 0 ? fmtMrd(p.db) : "—"}
-                  />
-                  {p.partner && (
+                    {sold > 0 && total > 0 && (
+                      <FactRow label="Solgt" value={`${sold} (${pct} %)`} />
+                    )}
+                    {sold > 0 && total > 0 && (
+                      <FactRow
+                        label="Ledig"
+                        value={Math.max(0, total - sold)}
+                      />
+                    )}
+                    {p.kvm > 0 && (
+                      <FactRow label="BRA-S" value={fmtNOK(p.kvm) + " kvm"} />
+                    )}
+                    {p.byggestart && (
+                      <FactRow
+                        label="Byggeperiode"
+                        value={`${p.byggestart}–${p.byggeslutt || "?"}`}
+                      />
+                    )}
+                    <FactRow label="Status" value={p.statusShort} />
                     <FactRow
-                      label="Partner"
-                      value={
-                        (p.partnerShare ? p.partnerShare + "% " : "") +
-                        p.partner
-                      }
+                      label="Omsetning"
+                      value={p.omsetning > 0 ? fmtMrd(p.omsetning) : "—"}
                     />
-                  )}
-                  {p.website && (
-                    <a
-                      href={p.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block mt-2 text-xs"
-                      style={{ color: COL.gold }}
-                    >
-                      {p.website.replace(/^https?:\/\//, "")} ↗
-                    </a>
-                  )}
+                    <FactRow
+                      label="DB"
+                      value={p.db > 0 ? fmtMrd(p.db) : "—"}
+                    />
+                    {p.partner && (
+                      <FactRow
+                        label="Partner"
+                        value={
+                          (p.partnerShare ? p.partnerShare + "% " : "") +
+                          p.partner
+                        }
+                      />
+                    )}
+                    {p.website && (
+                      <a
+                        href={p.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block mt-2 text-xs"
+                        style={{ color: COL.gold }}
+                      >
+                        {p.website.replace(/^https?:\/\//, "")} ↗
+                      </a>
+                    )}
+                  </div>
                 </div>
               </div>
 
