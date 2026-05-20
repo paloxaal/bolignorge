@@ -483,24 +483,41 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
       <FontImports />
       <style>{`
         @media print {
-          @page { size: A4; margin: 1.5cm; }
+          @page {
+            size: A4;
+            margin: 1cm;
+            @bottom-right {
+              content: counter(page) " / " counter(pages);
+              font-family: 'JetBrains Mono', monospace;
+              font-size: 9px;
+              color: #6B6452;
+            }
+            @bottom-left {
+              content: "Bolig Norge AS — Konfidensielt";
+              font-family: 'JetBrains Mono', monospace;
+              font-size: 9px;
+              color: #6B6452;
+            }
+          }
           html, body { background: #F9F4E8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          section { break-inside: avoid; page-break-inside: avoid; }
+          section { break-inside: auto; }
           h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
           /* Tables and table-like containers must not split across pages */
           table, .no-break, [data-no-break] {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
-          /* Each project block must stay together — heading + image + facts */
-          .project-block {
+          /* Project block: header+facts must stay together, narrative can flow */
+          .project-block { break-inside: auto !important; page-break-inside: auto !important; }
+          .project-block-header {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+            break-after: avoid !important;
+            page-break-after: avoid !important;
           }
-          /* Cap project images so they don't push content off page */
           .project-block img {
-            max-height: 9cm !important;
+            max-height: 8.5cm !important;
             object-fit: cover;
           }
           /* IRR section is tall — always force new page so it stays whole */
@@ -518,22 +535,45 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             width: 100% !important;
             height: auto !important;
           }
-          /* Compact cover hero on print */
-          .cover-hero { padding: 2.5rem !important; min-height: auto !important; }
-          .cover-hero h1 { font-size: 3rem !important; }
-          /* Back cover — visible only in print, as flex band */
-          .report-back-cover { 
-            display: flex !important; 
-            align-items: center;
+          /* Cover-hero: full A4 page in print */
+          .cover-hero {
+            margin: 0 !important;
+            padding: 2cm !important;
+            min-height: calc(297mm - 2.4cm) !important;
+            break-after: page !important;
+            page-break-after: always !important;
+            display: flex !important;
+            flex-direction: column;
             justify-content: space-between;
-            gap: 2rem;
           }
+          .cover-hero h1 { font-size: 4rem !important; }
+          /* Chapter breaks: §03 Prosjekt for prosjekt + §07 Selskapstall start on new page */
+          .chapter-break {
+            break-before: page !important;
+            page-break-before: always !important;
+          }
+          /* Tighter section spacing in print */
+          .report-flow > * + * { margin-top: 0.9cm !important; }
+          /* Closing card — print only, full page */
+          .report-closing {
+            display: flex !important;
+            flex-direction: column;
+            justify-content: space-between;
+            break-before: page !important;
+            page-break-before: always !important;
+            padding: 2cm !important;
+            min-height: calc(297mm - 2.4cm) !important;
+          }
+          /* Old slim back-cover band — replaced by closing card, hide if still present */
+          .report-back-cover { display: none !important; }
           /* Hide ALL header/nav/footer at any nesting depth, EXCEPT marked report elements */
           body header:not([data-report="keep"]),
           body nav:not([data-report="keep"]),
           body footer:not([data-report="keep"]) {
             display: none !important;
           }
+          /* Avoid orphans/widows */
+          p { orphans: 3; widows: 3; }
         }
       `}</style>
       <div className="hidden md:flex print:hidden items-center" style={{ position: "fixed", top: 0, right: 0, zIndex: 100, padding: "12px 20px", background: COL.paper, borderBottom: `1px solid ${COL.border}`, borderLeft: `1px solid ${COL.border}`, borderBottomLeftRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, gap: 16 }}>
@@ -817,50 +857,103 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           )}
         </div>
 
-        {/* Back cover footer band for print — only visible in print mode */}
-        <div
-          data-report="keep"
-          className="hidden print:block report-back-cover"
-          style={{
-            background: COL.ink,
-            color: COL.paper,
-            padding: "2rem 3rem",
-            marginTop: "2.5rem",
-            breakInside: "avoid",
-            pageBreakInside: "avoid",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", flexShrink: 0 }}>
-            <BNLogo light height={28} />
-            <div
-              style={{
-                fontFamily: "'Playfair Display', serif",
-                fontSize: "1.1rem",
-                fontWeight: 400,
-                letterSpacing: "-0.01em",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {data.meta?.companyName}
-            </div>
-          </div>
+        {/* Closing — print-only proper signoff */}
+        {page === "dashboard" && (
           <div
+            data-report="keep"
+            className="report-closing"
             style={{
-              fontSize: "9px",
-              letterSpacing: "0.25em",
-              textTransform: "uppercase",
-              opacity: 0.6,
-              fontFamily: "'JetBrains Mono', monospace",
-              textAlign: "right",
-              lineHeight: 1.6,
+              display: "none",
+              background: COL.ink,
+              color: COL.paper,
             }}
           >
-            <div>Konfidensielt — kun for interne formål</div>
-            <div style={{ opacity: 0.7, marginTop: "2px" }}>
-              Månedsrapport · {data.meta?.reportPeriod} · {data.meta?.reportYear}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  letterSpacing: "0.25em",
+                  textTransform: "uppercase",
+                  opacity: 0.55,
+                }}
+              >
+                Rapport slutt
+              </div>
+              <BNLogo light height={32} />
+            </div>
+
+            <div style={{ margin: "3rem 0" }}>
+              <div
+                style={{
+                  width: 48,
+                  height: 1,
+                  background: COL.goldSoft,
+                  opacity: 0.85,
+                  marginBottom: "1rem",
+                }}
+              />
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: "0.32em",
+                  textTransform: "uppercase",
+                  opacity: 0.7,
+                  color: COL.goldSoft,
+                  marginBottom: "0.75rem",
+                }}
+              >
+                Månedsrapport · {data.meta?.reportPeriod} {data.meta?.reportYear}
+              </div>
+              <div
+                style={{
+                  fontFamily: "'Playfair Display', serif",
+                  fontSize: "2rem",
+                  fontWeight: 400,
+                  letterSpacing: "-0.015em",
+                  marginBottom: "0.75rem",
+                }}
+              >
+                {data.meta?.companyName}
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  lineHeight: 1.7,
+                  opacity: 0.7,
+                  maxWidth: "28rem",
+                }}
+              >
+                Dette dokumentet er konfidensielt styremateriale og skal ikke
+                videreformidles uten skriftlig samtykke. Tall og prognoser er
+                basert på interne registreringer på rapport-tidspunkt og kan
+                endre seg.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-end",
+                fontSize: 10,
+                letterSpacing: "0.2em",
+                textTransform: "uppercase",
+                opacity: 0.45,
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            >
+              <span>
+                Generert ·{" "}
+                {new Date().toLocaleDateString("nb-NO", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </span>
+              <span>Styremateriale</span>
             </div>
           </div>
-        </div>
+        )}
       </main>
 
       {viewingProject && (
@@ -985,16 +1078,17 @@ function DashboardPage({ data, totals }) {
     .sort((a, b) => b.Omsetning - a.Omsetning);
 
   return (
-    <div className="space-y-10">
+    <div className="report-flow space-y-10">
       {/* Cover hero — match admin Rapport */}
       <div
         className="cover-hero -mx-4 -mt-6 px-6 py-10 md:-mx-10 md:-mt-8 md:px-16 md:py-16"
         style={{ background: COL.ink, color: COL.paper }}
       >
+        {/* Top: confidentiality + logo */}
         <div className="flex justify-between items-start gap-4">
           <div
             className="text-[10px] tracking-[0.25em] uppercase"
-            style={{ opacity: 0.6 }}
+            style={{ opacity: 0.55 }}
           >
             Konfidensielt — kun for interne formål
           </div>
@@ -1002,50 +1096,61 @@ function DashboardPage({ data, totals }) {
             <BNLogo light height={28} className="md:h-9" />
           </div>
         </div>
-        <div className="mt-10 md:mt-16 flex flex-col md:flex-row md:items-end md:justify-between gap-4 md:gap-6">
-          <div>
-            <div
-              className="text-[11px] tracking-[0.3em] uppercase mb-3"
-              style={{ opacity: 0.7, color: COL.goldSoft }}
-            >
-              Månedsrapport
-            </div>
-            <h1
-              className="text-4xl md:text-6xl mb-2"
-              style={{
-                fontFamily: "'Playfair Display', serif",
-                fontWeight: 400,
-                letterSpacing: "-0.02em",
-                lineHeight: 1.1,
-              }}
-            >
-              {data.meta?.reportPeriod}
-            </h1>
-            <div
-              className="text-lg md:text-2xl"
-              style={{
-                fontFamily: "'Playfair Display', serif",
-                fontWeight: 300,
-                opacity: 0.8,
-              }}
-            >
-              {data.meta?.companyName} · {data.meta?.reportYear}
-            </div>
-          </div>
+
+        {/* Middle: title block */}
+        <div className="mt-10 md:mt-16">
           <div
-            className="text-xs md:pb-2 whitespace-nowrap"
+            className="mb-4"
             style={{
-              opacity: 0.6,
-              fontFamily: "'JetBrains Mono', monospace",
+              width: 48,
+              height: 1,
+              background: COL.goldSoft,
+              opacity: 0.85,
+            }}
+          />
+          <div
+            className="text-[11px] tracking-[0.32em] uppercase mb-3"
+            style={{ opacity: 0.7, color: COL.goldSoft }}
+          >
+            Månedsrapport
+          </div>
+          <h1
+            className="text-4xl md:text-6xl mb-2"
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 400,
+              letterSpacing: "-0.02em",
+              lineHeight: 1.05,
             }}
           >
-            {data.meta?.reportDate &&
-              new Date(data.meta.reportDate).toLocaleDateString("nb-NO", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric",
-              })}
+            {data.meta?.reportPeriod}
+          </h1>
+          <div
+            className="text-lg md:text-2xl"
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 300,
+              opacity: 0.78,
+            }}
+          >
+            {data.meta?.companyName} · {data.meta?.reportYear}
           </div>
+        </div>
+
+        {/* Bottom: metadata stamp — print only */}
+        <div
+          className="hidden print:flex justify-between items-end gap-3 text-[10px] tracking-[0.2em] uppercase"
+          style={{ opacity: 0.45, fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          <span>
+            Generert ·{" "}
+            {new Date().toLocaleDateString("nb-NO", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </span>
+          <span>Styremateriale</span>
         </div>
       </div>
 
@@ -1131,7 +1236,9 @@ function DashboardPage({ data, totals }) {
       </section>
 
       {/* §03 — Prosjekt for prosjekt */}
-      <ProjectByProjectSection data={data} num="03" />
+      <div className="chapter-break">
+        <ProjectByProjectSection data={data} num="03" />
+      </div>
 
       {/* §04 — Prosjektstatus: KPI-kort + omsetning/DB chart */}
       <section className="space-y-6">
@@ -1238,7 +1345,7 @@ function DashboardPage({ data, totals }) {
       </section>
 
       {/* §05 — Selskapstall: NAV + EK-binding chart */}
-      <section className="space-y-6">
+      <section className="space-y-6 chapter-break">
         <div>
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-1"
@@ -1402,94 +1509,99 @@ function ProjectByProjectSection({ data, num }) {
               className="pb-10 project-block"
               style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
             >
-              {/* Header: name + location */}
-              <div className="mb-5">
-                <h4
-                  className="text-2xl mb-1"
-                  style={{
-                    fontFamily: "'Playfair Display', serif",
-                    fontWeight: 500,
-                    color: COL.ink,
-                  }}
-                >
-                  {p.name}
-                </h4>
-                <div className="text-xs" style={{ color: COL.muted }}>
-                  {p.location}
-                </div>
-              </div>
-
-              {/* Image + facts in 2 columns */}
-              <div
-                className={
-                  p.imageUrl
-                    ? "grid grid-cols-1 md:grid-cols-2 gap-6 mb-6"
-                    : "mb-6"
-                }
-              >
-                {p.imageUrl && (
-                  <div className="overflow-hidden">
-                    <img
-                      src={p.imageUrl}
-                      alt={p.name}
-                      className="w-full h-auto"
-                      style={{
-                        display: "block",
-                        aspectRatio: "16 / 10",
-                        objectFit: "cover",
-                      }}
-                    />
+              <div className="project-block-header">
+                {/* Header: name + location */}
+                <div className="mb-5">
+                  <h4
+                    className="text-2xl mb-1"
+                    style={{
+                      fontFamily: "'Playfair Display', serif",
+                      fontWeight: 500,
+                      color: COL.ink,
+                    }}
+                  >
+                    {p.name}
+                  </h4>
+                  <div className="text-xs" style={{ color: COL.muted }}>
+                    {p.location}
                   </div>
-                )}
-                <div className="space-y-1.5 text-xs">
-                  <FactRow
-                    label="Antall boliger"
-                    value={total > 0 ? total : "—"}
-                  />
-                  {sold > 0 && total > 0 && (
-                    <FactRow label="Solgt" value={`${sold} (${pct} %)`} />
+                </div>
+
+                {/* Image + facts in 2 columns */}
+                <div
+                  className={
+                    p.imageUrl
+                      ? "grid grid-cols-1 md:grid-cols-2 gap-6 mb-6"
+                      : "mb-6"
+                  }
+                >
+                  {p.imageUrl && (
+                    <div className="overflow-hidden">
+                      <img
+                        src={p.imageUrl}
+                        alt={p.name}
+                        className="w-full h-auto"
+                        style={{
+                          display: "block",
+                          aspectRatio: "16 / 10",
+                          objectFit: "cover",
+                        }}
+                      />
+                    </div>
                   )}
-                  {sold > 0 && total > 0 && (
-                    <FactRow label="Ledig" value={Math.max(0, total - sold)} />
-                  )}
-                  {p.kvm > 0 && (
-                    <FactRow label="BRA-S" value={fmtNOK(p.kvm) + " kvm"} />
-                  )}
-                  {p.byggestart && (
+                  <div className="space-y-1.5 text-xs">
                     <FactRow
-                      label="Byggeperiode"
-                      value={`${p.byggestart}–${p.byggeslutt || "?"}`}
+                      label="Antall boliger"
+                      value={total > 0 ? total : "—"}
                     />
-                  )}
-                  <FactRow label="Status" value={p.statusShort} />
-                  <FactRow
-                    label="Omsetning"
-                    value={p.omsetning > 0 ? fmtMrd(p.omsetning) : "—"}
-                  />
-                  <FactRow
-                    label="DB"
-                    value={p.db > 0 ? fmtMrd(p.db) : "—"}
-                  />
-                  {p.partner && (
+                    {sold > 0 && total > 0 && (
+                      <FactRow label="Solgt" value={`${sold} (${pct} %)`} />
+                    )}
+                    {sold > 0 && total > 0 && (
+                      <FactRow
+                        label="Ledig"
+                        value={Math.max(0, total - sold)}
+                      />
+                    )}
+                    {p.kvm > 0 && (
+                      <FactRow label="BRA-S" value={fmtNOK(p.kvm) + " kvm"} />
+                    )}
+                    {p.byggestart && (
+                      <FactRow
+                        label="Byggeperiode"
+                        value={`${p.byggestart}–${p.byggeslutt || "?"}`}
+                      />
+                    )}
+                    <FactRow label="Status" value={p.statusShort} />
                     <FactRow
-                      label="Partner"
-                      value={
-                        (p.partnerShare ? p.partnerShare + "% " : "") +
-                        p.partner
-                      }
+                      label="Omsetning"
+                      value={p.omsetning > 0 ? fmtMrd(p.omsetning) : "—"}
                     />
-                  )}
-                  {p.website && (
-                    <a
-                      href={p.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block mt-2 text-xs"
-                      style={{ color: COL.gold }}
-                    >
-                      {p.website.replace(/^https?:\/\//, "")} ↗
-                    </a>
-                  )}
+                    <FactRow
+                      label="DB"
+                      value={p.db > 0 ? fmtMrd(p.db) : "—"}
+                    />
+                    {p.partner && (
+                      <FactRow
+                        label="Partner"
+                        value={
+                          (p.partnerShare ? p.partnerShare + "% " : "") +
+                          p.partner
+                        }
+                      />
+                    )}
+                    {p.website && (
+                      <a
+                        href={p.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block mt-2 text-xs"
+                        style={{ color: COL.gold }}
+                      >
+                        {p.website.replace(/^https?:\/\//, "")} ↗
+                      </a>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -2085,68 +2197,111 @@ function CapitalSummary({ financials }) {
       </div>
 
       <div
-        className="px-7 py-6 border-t"
+        className="border-t"
         style={{ borderColor: COL.borderSoft }}
       >
-        <div
-          className="text-[10px] tracking-[0.2em] uppercase mb-3"
-          style={{ color: COL.muted }}
-        >
-          År for år — resultat, utbytte og EK (mNOK)
-        </div>
-        <ResponsiveContainer width="100%" height={260}>
-          <ComposedChart
-            data={chartData}
-            margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+        <div className="px-7 py-6">
+          <div
+            className="text-[10px] tracking-[0.2em] uppercase mb-3"
+            style={{ color: COL.muted }}
           >
-            <CartesianGrid stroke={COL.borderSoft} vertical={false} />
-            <XAxis
-              dataKey="year"
-              stroke={COL.muted}
-              fontSize={11}
-              tick={{ fontFamily: "'JetBrains Mono', monospace" }}
-            />
-            <YAxis
-              stroke={COL.muted}
-              fontSize={11}
-              tick={{ fontFamily: "'JetBrains Mono', monospace" }}
-            />
-            <Tooltip
-              contentStyle={{
-                background: COL.paper,
-                border: `1px solid ${COL.border}`,
-                fontSize: 12,
-                fontFamily: "'JetBrains Mono', monospace",
-              }}
-            />
-            <Legend wrapperStyle={{ fontSize: 11 }} iconType="square" />
-            <Bar dataKey="Årsresultat" fill={COL.ink} barSize={14} />
-            <Bar dataKey="Utbytte" fill={COL.goldSoft} barSize={14} />
-            <Line
-              type="monotone"
-              dataKey="Bokført EK"
-              stroke={COL.sage}
-              strokeWidth={2}
-              dot={{ r: 3, fill: COL.sage }}
-            />
-            <Line
-              type="monotone"
-              dataKey="Akk. utbytte"
-              stroke={COL.gold}
-              strokeWidth={1.5}
-              strokeDasharray="2 4"
-              dot={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="Akk. resultat"
-              stroke={COL.burgundy}
-              strokeWidth={1.5}
-              strokeDasharray="4 4"
-              dot={false}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
+            Årlig flyt — resultat og utbytte (mNOK)
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <ComposedChart
+              data={chartData}
+              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+              barCategoryGap="20%"
+            >
+              <CartesianGrid stroke={COL.borderSoft} vertical={false} />
+              <XAxis
+                dataKey="year"
+                stroke={COL.muted}
+                fontSize={11}
+                tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+              />
+              <YAxis
+                stroke={COL.muted}
+                fontSize={11}
+                tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: COL.paper,
+                  border: `1px solid ${COL.border}`,
+                  fontSize: 12,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} iconType="square" />
+              <Bar dataKey="Årsresultat" fill={COL.ink} maxBarSize={28} />
+              <Bar dataKey="Utbytte" fill={COL.goldSoft} maxBarSize={28} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div
+          className="px-7 py-6 border-t"
+          style={{ borderColor: COL.borderSoft }}
+        >
+          <div
+            className="text-[10px] tracking-[0.2em] uppercase mb-3"
+            style={{ color: COL.muted }}
+          >
+            Akkumulert — bokført EK og kumulative tall (mNOK)
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <ComposedChart
+              data={chartData}
+              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+            >
+              <CartesianGrid stroke={COL.borderSoft} vertical={false} />
+              <XAxis
+                dataKey="year"
+                stroke={COL.muted}
+                fontSize={11}
+                tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+              />
+              <YAxis
+                stroke={COL.muted}
+                fontSize={11}
+                tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: COL.paper,
+                  border: `1px solid ${COL.border}`,
+                  fontSize: 12,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} iconType="line" />
+              <Line
+                type="monotone"
+                dataKey="Bokført EK"
+                stroke={COL.sage}
+                strokeWidth={2.5}
+                dot={{ r: 3, fill: COL.sage }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Akk. utbytte"
+                stroke={COL.gold}
+                strokeWidth={1.75}
+                strokeDasharray="3 4"
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="Akk. resultat"
+                stroke={COL.burgundy}
+                strokeWidth={1.75}
+                strokeDasharray="5 4"
+                dot={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       <div

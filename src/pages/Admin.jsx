@@ -31,7 +31,6 @@ import {
   FolderOpen,
   Menu,
   History,
-  Info,
 } from "lucide-react";
 import {
   BarChart,
@@ -1961,70 +1960,115 @@ function CapitalSummary({ financials }) {
         />
       </div>
 
-      {/* Year-by-year chart */}
+      {/* Year-by-year chart — split into two panels for cleaner reading */}
       <div
-        className="px-7 py-6 border-t"
+        className="border-t"
         style={{ borderColor: COL.borderSoft }}
       >
-        <div
-          className="text-[10px] tracking-[0.2em] uppercase mb-3"
-          style={{ color: COL.muted }}
-        >
-          År for år — resultat, utbytte og EK (mNOK)
-        </div>
-        <ResponsiveContainer width="100%" height={260}>
-          <ComposedChart
-            data={chartData}
-            margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+        {/* Panel 1: Bars — annual flow */}
+        <div className="px-7 py-6">
+          <div
+            className="text-[10px] tracking-[0.2em] uppercase mb-3"
+            style={{ color: COL.muted }}
           >
-            <CartesianGrid stroke={COL.borderSoft} vertical={false} />
-            <XAxis
-              dataKey="year"
-              stroke={COL.muted}
-              fontSize={11}
-              tick={{ fontFamily: "'JetBrains Mono', monospace" }}
-            />
-            <YAxis
-              stroke={COL.muted}
-              fontSize={11}
-              tick={{ fontFamily: "'JetBrains Mono', monospace" }}
-            />
-            <Tooltip
-              contentStyle={{
-                background: COL.paper,
-                border: `1px solid ${COL.border}`,
-                fontSize: 12,
-                fontFamily: "'JetBrains Mono', monospace",
-              }}
-            />
-            <Legend wrapperStyle={{ fontSize: 11 }} iconType="square" />
-            <Bar dataKey="Årsresultat" fill={COL.ink} barSize={14} />
-            <Bar dataKey="Utbytte" fill={COL.goldSoft} barSize={14} />
-            <Line
-              type="monotone"
-              dataKey="Bokført EK"
-              stroke={COL.sage}
-              strokeWidth={2}
-              dot={{ r: 3, fill: COL.sage }}
-            />
-            <Line
-              type="monotone"
-              dataKey="Akk. utbytte"
-              stroke={COL.gold}
-              strokeWidth={1.5}
-              strokeDasharray="2 4"
-              dot={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="Akk. resultat"
-              stroke={COL.burgundy}
-              strokeWidth={1.5}
-              strokeDasharray="4 4"
-              dot={false}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
+            Årlig flyt — resultat og utbytte (mNOK)
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <ComposedChart
+              data={chartData}
+              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+              barCategoryGap="20%"
+            >
+              <CartesianGrid stroke={COL.borderSoft} vertical={false} />
+              <XAxis
+                dataKey="year"
+                stroke={COL.muted}
+                fontSize={11}
+                tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+              />
+              <YAxis
+                stroke={COL.muted}
+                fontSize={11}
+                tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: COL.paper,
+                  border: `1px solid ${COL.border}`,
+                  fontSize: 12,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} iconType="square" />
+              <Bar dataKey="Årsresultat" fill={COL.ink} maxBarSize={28} />
+              <Bar dataKey="Utbytte" fill={COL.goldSoft} maxBarSize={28} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Panel 2: Lines — cumulative stock */}
+        <div
+          className="px-7 py-6 border-t"
+          style={{ borderColor: COL.borderSoft }}
+        >
+          <div
+            className="text-[10px] tracking-[0.2em] uppercase mb-3"
+            style={{ color: COL.muted }}
+          >
+            Akkumulert — bokført EK og kumulative tall (mNOK)
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <ComposedChart
+              data={chartData}
+              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+            >
+              <CartesianGrid stroke={COL.borderSoft} vertical={false} />
+              <XAxis
+                dataKey="year"
+                stroke={COL.muted}
+                fontSize={11}
+                tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+              />
+              <YAxis
+                stroke={COL.muted}
+                fontSize={11}
+                tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: COL.paper,
+                  border: `1px solid ${COL.border}`,
+                  fontSize: 12,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} iconType="line" />
+              <Line
+                type="monotone"
+                dataKey="Bokført EK"
+                stroke={COL.sage}
+                strokeWidth={2.5}
+                dot={{ r: 3, fill: COL.sage }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Akk. utbytte"
+                stroke={COL.gold}
+                strokeWidth={1.75}
+                strokeDasharray="3 4"
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="Akk. resultat"
+                stroke={COL.burgundy}
+                strokeWidth={1.75}
+                strokeDasharray="5 4"
+                dot={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       <div
@@ -5299,35 +5343,6 @@ function ReportPage({ data, setData, totals }) {
         </div>
       </div>
 
-      {/* Print-tips */}
-      <div
-        className="px-4 py-2.5 border-l-2 print:hidden text-[11px] flex items-start gap-2"
-        style={{
-          background: "rgba(168, 132, 62, 0.06)",
-          borderLeftColor: COL.gold,
-          color: COL.inkSoft,
-        }}
-      >
-        <Info size={12} style={{ color: COL.gold, flexShrink: 0, marginTop: 2 }} />
-        <div>
-          <strong style={{ color: COL.ink }}>Print-tips:</strong> I print-dialogen,
-          slå av <em>"Topptekst og bunntekst"</em> (Chrome:{" "}
-          <kbd
-            style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 10,
-              background: COL.paper,
-              padding: "1px 5px",
-              border: `1px solid ${COL.border}`,
-            }}
-          >
-            Flere innstillinger → Topp- og bunntekst
-          </kbd>
-          ) for å fjerne dato/URL fra utskriften. Velg <em>"Lagre som PDF"</em> som
-          mål for ren PDF-eksport.
-        </div>
-      </div>
-
       {/* Delingslenke */}
       <div
         className="px-5 py-5 border print:hidden"
@@ -5491,7 +5506,7 @@ function ReportPage({ data, setData, totals }) {
           </div>
 
           {/* Middle: title block */}
-          <div className="my-12">
+          <div className="mt-16">
             <div
               className="mb-4"
               style={{
@@ -5502,13 +5517,13 @@ function ReportPage({ data, setData, totals }) {
               }}
             />
             <div
-              className="text-[11px] tracking-[0.32em] uppercase mb-4"
+              className="text-[11px] tracking-[0.32em] uppercase mb-3"
               style={{ opacity: 0.7, color: COL.goldSoft }}
             >
               Månedsrapport
             </div>
             <h1
-              className="text-6xl mb-3"
+              className="text-6xl mb-2"
               style={{
                 fontFamily: "'Playfair Display', serif",
                 fontWeight: 400,
@@ -5530,9 +5545,9 @@ function ReportPage({ data, setData, totals }) {
             </div>
           </div>
 
-          {/* Bottom: metadata stamp */}
+          {/* Bottom: metadata stamp — print only */}
           <div
-            className="flex justify-between items-end text-[10px] tracking-[0.2em] uppercase"
+            className="hidden print:flex justify-between items-end text-[10px] tracking-[0.2em] uppercase"
             style={{ opacity: 0.45, fontFamily: "'JetBrains Mono', monospace" }}
           >
             <span>
