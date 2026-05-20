@@ -5645,7 +5645,7 @@ function ReportPage({ data, setData, totals }) {
           .print-only { display: none !important; }
         }
         @media print {
-          /* DEFAULT PAGE — body content with footer */
+          /* Default page: A4 with margin + footer */
           @page {
             size: A4;
             margin: 14mm 12mm 16mm 12mm;
@@ -5665,9 +5665,8 @@ function ReportPage({ data, setData, totals }) {
               padding-bottom: 6mm;
             }
           }
-          /* COVERPAGE — full-bleed, no margins, no footer */
-          @page coverpage {
-            size: A4;
+          /* First page (cover): no margin, no footer — full bleed */
+          @page :first {
             margin: 0;
             @bottom-left  { content: ""; }
             @bottom-right { content: ""; }
@@ -5677,13 +5676,17 @@ function ReportPage({ data, setData, totals }) {
             background: #F6F1E7 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: auto !important;
+            max-width: 100% !important;
           }
           * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
 
-          /* Hide site chrome */
+          /* Hide chrome */
           .print\\:hidden,
           aside,
           body header:not([data-report="keep"]),
@@ -5693,21 +5696,24 @@ function ReportPage({ data, setData, totals }) {
           }
 
           /* Reset main padding */
-          main { padding: 0 !important; margin: 0 !important; }
+          main {
+            padding: 0 !important;
+            margin: 0 !important;
+            display: block !important;
+            width: auto !important;
+            max-width: 100% !important;
+          }
 
           /* Show / hide print-only elements */
           .screen-only { display: none !important; }
           .print-only { display: block !important; }
 
-          /* ---------- COVER & CLOSING ---------- */
-          .report-cover,
-          .report-closing {
-            page: coverpage !important;
-            box-sizing: border-box !important;
-            width: 210mm !important;
-            min-height: 297mm !important;
+          /* ============ COVER PAGE ============ */
+          .report-cover {
             margin: 0 !important;
             padding: 26mm 22mm 22mm 22mm !important;
+            min-height: 297mm !important;
+            box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: space-between !important;
@@ -5715,28 +5721,43 @@ function ReportPage({ data, setData, totals }) {
             color: #F6F1E7 !important;
             border: none !important;
             border-radius: 0 !important;
-          }
-          .report-cover {
             break-after: page !important;
             page-break-after: always !important;
           }
+          .report-cover h1 { font-size: 4.4rem !important; line-height: 1.02 !important; }
+
+          /* ============ CLOSING PAGE ============ */
           .report-closing {
             display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            margin: 0 !important;
+            padding: 22mm 20mm !important;
+            min-height: calc(297mm - 30mm) !important;
+            box-sizing: border-box !important;
+            background: #0E1A2B !important;
+            color: #F6F1E7 !important;
+            border: none !important;
+            border-radius: 0 !important;
             break-before: page !important;
             page-break-before: always !important;
           }
-          .report-cover h1 { font-size: 4.4rem !important; line-height: 1.02 !important; }
 
-          /* ---------- CONTENT FLOW ---------- */
+          /* ============ CONTENT FLOW ============ */
           .report-content {
             padding: 0 !important;
             margin: 0 !important;
             background: #F6F1E7 !important;
+            max-width: 100% !important;
           }
-          .report-content > * + * { margin-top: 9mm !important; }
+          .report-content > * + * { margin-top: 7mm !important; }
+          .report-content > section,
+          .report-content > div {
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+          }
 
-          /* Section breaks */
-          section { break-inside: auto; }
+          /* Section headers */
           h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
           p { orphans: 3; widows: 3; }
 
@@ -5755,10 +5776,10 @@ function ReportPage({ data, setData, totals }) {
             page-break-after: avoid !important;
           }
           .project-block img {
-            max-height: 7.5cm !important;
+            max-height: 6.5cm !important;
             object-fit: cover;
           }
-          .project-block + .project-block { margin-top: 8mm !important; }
+          .project-block + .project-block { margin-top: 6mm !important; }
 
           /* IRR always new page */
           .irr-section {
@@ -5767,13 +5788,9 @@ function ReportPage({ data, setData, totals }) {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
-          /* Capital summary stays together */
-          .capital-summary {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
+          /* capital-summary intentionally allowed to split across pages */
 
-          /* Chapter breaks */
+          /* Chapter break only for Selskapstall */
           .chapter-break {
             break-before: page !important;
             page-break-before: always !important;
@@ -5791,7 +5808,6 @@ function ReportPage({ data, setData, totals }) {
           img { max-width: 100% !important; }
 
           .report-screen-footer { display: none !important; }
-          /* Show closing card only in print, not on screen */
           .report-closing { display: flex !important; }
         }
       `}</style>
@@ -6108,9 +6124,7 @@ function ReportPage({ data, setData, totals }) {
           </section>
 
           {/* Prosjekt for prosjekt */}
-          <div className="chapter-break">
-            <ProjectByProjectSection data={data} num="03" />
-          </div>
+          <ProjectByProjectSection data={data} num="03" />
 
           {/* Portefølje */}
           <section>

@@ -896,7 +896,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           .print-only { display: none !important; }
         }
         @media print {
-          /* DEFAULT PAGE — body content with footer */
+          /* Default page: A4 with margin + footer */
           @page {
             size: A4;
             margin: 14mm 12mm 16mm 12mm;
@@ -916,9 +916,8 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
               padding-bottom: 6mm;
             }
           }
-          /* COVERPAGE — full-bleed, no margins, no footer */
-          @page coverpage {
-            size: A4;
+          /* First page (cover): no margin, no footer — full bleed */
+          @page :first {
             margin: 0;
             @bottom-left  { content: ""; }
             @bottom-right { content: ""; }
@@ -941,22 +940,33 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           aside,
           .print\\:hidden { display: none !important; }
 
-          /* Reset main padding so cover can fill */
-          main { padding: 0 !important; margin: 0 !important; background: #F6F1E7 !important; }
+          /* Reset layout containers — let content flow at page width */
+          main {
+            padding: 0 !important;
+            margin: 0 !important;
+            display: block !important;
+            width: auto !important;
+            max-width: 100% !important;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: auto !important;
+            max-width: 100% !important;
+          }
 
           /* Show / hide print-only elements */
           .screen-only { display: none !important; }
           .print-only { display: block !important; }
 
-          /* ---------- COVER & CLOSING ---------- */
-          .cover-hero,
-          .report-closing {
-            page: coverpage !important;
-            box-sizing: border-box !important;
-            width: 210mm !important;
-            min-height: 297mm !important;
+          /* ============ COVER PAGE ============ */
+          /* On first page only — @page :first removes the 14/12mm margin
+             so the cover element naturally fills 210x297mm. */
+          .cover-hero {
             margin: 0 !important;
             padding: 26mm 22mm 22mm 22mm !important;
+            min-height: 297mm !important;
+            box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: space-between !important;
@@ -964,24 +974,46 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             color: #F6F1E7 !important;
             border: none !important;
             border-radius: 0 !important;
-          }
-          .cover-hero {
             break-after: page !important;
             page-break-after: always !important;
-          }
-          .report-closing {
-            break-before: page !important;
-            page-break-before: always !important;
           }
           .cover-hero h1 { font-size: 4.4rem !important; line-height: 1.02 !important; }
           .cover-hero .cover-meta { font-size: 1.65rem !important; }
 
-          /* ---------- CONTENT FLOW ---------- */
-          .report-flow { padding: 0 !important; margin: 0 !important; }
-          .report-flow > * + * { margin-top: 9mm !important; }
-          .report-flow > section { break-inside: auto; }
+          /* ============ CLOSING PAGE ============ */
+          /* Closing renders on a normal page (with footer). The dark card
+             sits within the page margin like a framed signoff. */
+          .report-closing {
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            margin: 0 !important;
+            padding: 22mm 20mm !important;
+            min-height: calc(297mm - 30mm) !important;
+            box-sizing: border-box !important;
+            background: #0E1A2B !important;
+            color: #F6F1E7 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            break-before: page !important;
+            page-break-before: always !important;
+          }
 
-          /* Section headers: keep with their first content */
+          /* ============ CONTENT FLOW ============ */
+          .report-flow {
+            padding: 0 !important;
+            margin: 0 !important;
+            background: #F6F1E7 !important;
+            max-width: 100% !important;
+          }
+          .report-flow > * + * { margin-top: 7mm !important; }
+          .report-flow > section,
+          .report-flow > div {
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+          }
+
+          /* Section headers stay with their first content */
           h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
           p { orphans: 3; widows: 3; }
 
@@ -991,8 +1023,11 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             page-break-inside: avoid !important;
           }
 
-          /* Project block: header+facts together, narrative can flow */
-          .project-block { break-inside: auto !important; page-break-inside: auto !important; }
+          /* Project blocks — keep header+image+facts together; status text flows */
+          .project-block {
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+          }
           .project-block-header {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
@@ -1000,33 +1035,28 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             page-break-after: avoid !important;
           }
           .project-block img {
-            max-height: 7.5cm !important;
+            max-height: 6.5cm !important;
             object-fit: cover;
           }
-          /* Spacing between consecutive projects: tighter */
-          .project-block + .project-block { margin-top: 8mm !important; }
+          .project-block + .project-block { margin-top: 6mm !important; }
 
-          /* IRR section — always new page, never split */
+          /* IRR section — its own page, never split */
           .irr-section {
             break-before: page !important;
             page-break-before: always !important;
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
-          /* Capital summary stays together */
-          .capital-summary {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
+          /* IMPORTANT: capital-summary does NOT have break-inside avoid —
+             it's too tall to fit one page and forcing it leaves empty pages */
 
-          /* Chapter breaks (§03 Prosjekt for prosjekt, §05 Selskapstall) */
+          /* Chapter break — only for Selskapstall section */
           .chapter-break {
             break-before: page !important;
             page-break-before: always !important;
           }
 
-          /* Recharts: constrain in print to avoid overflow; we also render
-             print-safe SVG fallbacks for the most fragile charts */
+          /* Recharts fallback — kept for completeness */
           .recharts-responsive-container,
           .recharts-wrapper,
           svg.recharts-surface {
@@ -1035,10 +1065,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             height: auto !important;
           }
 
-          /* Image rules */
           img { max-width: 100% !important; }
-
-          /* Old back-cover band — hide */
           .report-back-cover { display: none !important; }
         }
       `}</style>
@@ -1704,9 +1731,7 @@ function DashboardPage({ data, totals }) {
       </section>
 
       {/* §03 — Prosjekt for prosjekt */}
-      <div className="chapter-break">
-        <ProjectByProjectSection data={data} num="03" />
-      </div>
+      <ProjectByProjectSection data={data} num="03" />
 
       {/* §04 — Prosjektstatus: KPI-kort + omsetning/DB chart */}
       <section className="space-y-6">
