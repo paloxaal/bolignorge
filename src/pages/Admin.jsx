@@ -630,7 +630,7 @@ function PrintVBarChart({ data, xKey, series, colors, formatValue }) {
   const min = Math.min(0, ...values);
   const range = max - min;
   const chartW = 760;
-  const chartH = 190;
+  const chartH = 240;
   const padL = 44;
   const padR = 18;
   const padT = 14;
@@ -735,7 +735,7 @@ function PrintLineChart({ data, xKey, series, colors, dashes, formatValue }) {
   const min = Math.min(0, ...values);
   const range = max - min;
   const chartW = 760;
-  const chartH = 190;
+  const chartH = 240;
   const padL = 50;
   const padR = 18;
   const padT = 14;
@@ -5645,10 +5645,11 @@ function ReportPage({ data, setData, totals }) {
           .print-only { display: none !important; }
         }
         @media print {
-          /* Default page: A4 with margin + footer */
+          /* Default page: A4 with comfortable top margin so section headings
+             and project headers don't sit pinched against the page edge. */
           @page {
             size: A4;
-            margin: 14mm 12mm 18mm 12mm;
+            margin: 17mm 12mm 18mm 12mm;
             @bottom-left {
               content: "Bolig Norge AS — Konfidensielt";
               font-family: 'JetBrains Mono', monospace;
@@ -5770,12 +5771,60 @@ function ReportPage({ data, setData, totals }) {
             page-break-inside: avoid !important;
           }
 
-          /* Project blocks */
+          /* §02 Marked & outlook card — keep bordered cards together so the
+             frame doesn't get clipped at a page boundary. (Class is harmless
+             if not present on the §02 element in this preview.) */
+          .market-section {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            padding: 6mm 7mm !important;
+          }
+          .market-section h2 { margin-bottom: 0 !important; }
+          .market-section > div:first-of-type { margin-bottom: 4mm !important; }
+          .market-section .market-text { font-size: 13.5px !important; line-height: 1.6 !important; }
+          .market-section .float-right {
+            float: none !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            margin-bottom: 3mm !important;
+          }
+          .market-section img { max-height: 5.5cm !important; }
+
+          /* PAGE-TOP BREATHING ROOM
+             Chrome (Skia/PDF) doesn't reliably honor @page top margin — the
+             effective top margin lands around 2-3 mm regardless. We compensate
+             by adding padding-top to elements that frequently land at the top
+             of a page. Padding-top is NOT collapsed at page breaks, so it
+             always renders.
+
+             Sections that have their own padding (chart-panel-card uses p-8,
+             market-section is overridden above, prosjektstatus-block is mid-
+             page on the §04 spread) are excluded to avoid breaking pagination. */
+          .report-content > section:not(.chart-panel-card):not(.market-section):not(.prosjektstatus-block) {
+            padding-top: 10mm !important;
+          }
+
+          /* §04 Prosjektstatus — keep header + KPI grid + chart together
+             so the title doesn't get stranded above a page break. */
+          .prosjektstatus-block {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .chart-panel-card {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          /* Project blocks — tightened paddings so two blocks fit per A4 page
+             where possible. padding-top bumped to 6mm so a block at the top
+             of a page has visible breathing room. */
           .project-block {
             break-inside: auto !important;
             page-break-inside: auto !important;
-            padding-top: 3mm !important;
-            padding-bottom: 4mm !important;
+            padding-top: 6mm !important;
+            padding-bottom: 3mm !important;
           }
           .project-block-header {
             break-inside: avoid !important;
@@ -5783,21 +5832,37 @@ function ReportPage({ data, setData, totals }) {
             break-after: avoid !important;
             page-break-after: avoid !important;
           }
+          .project-block-header > div { margin-bottom: 3mm !important; }
+          .project-block-header > div:last-child { margin-bottom: 0 !important; }
+          .project-block-header .grid { gap: 5mm !important; }
+          /* Status label + paragraph stay together AND stay with header */
           .project-status {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+            break-before: avoid !important;
+            page-break-before: avoid !important;
+            margin-top: 3mm !important;
           }
           .project-block p {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
+          .project-status p {
+            line-height: 1.55 !important;
+          }
           .project-block img {
-            max-height: 5cm !important;
+            max-height: 4.6cm !important;
             object-fit: cover;
           }
-          /* Tighter fact rows in print */
-          .fact-row {
-            padding: 3px 0 !important;
+          /* Tighten the gap between project blocks in print.
+             Was 5 mm — now 0 because each block has padding-top: 6mm which
+             defines the visual gap between blocks. */
+          .report-content .space-y-8 > * + *,
+          .report-content .print\\:space-y-6 > * + * {
+            margin-top: 0 !important;
+          }
+          section > .mt-6 {
+            margin-top: 4mm !important;
           }
 
           /* KPI grids stay together */
@@ -5806,45 +5871,26 @@ function ReportPage({ data, setData, totals }) {
             page-break-inside: avoid !important;
           }
 
-          /* Chart panels stay together */
+          /* Chart panels inside capital-summary — the Akkumulert chart lands
+             at the very top of a page with 0 mm above it when the card
+             splits across pages. Generous padding-top gives breathing room. */
           .chart-panel {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
-          }
-
-          /* §02 Marked & outlook bordered card stays together */
-          .market-card {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-
-          /* §04 Prosjektstatus chart section — atomic */
-          .chart-section {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-
-          /* CapitalSummary on its own fresh page */
-          .capital-summary {
-            break-before: page !important;
-            page-break-before: always !important;
+            padding-top: 12mm !important;
           }
 
           .market-text { break-inside: auto; }
 
-          /* IRR always new page */
+          /* IRR section — must not split, but allowed to flow on the same
+             page as the preceding chart if there's room. Margin tightened
+             to 3mm so the increased @page top margin doesn't push IRR
+             onto its own page. */
           .irr-section {
-            break-before: page !important;
-            page-break-before: always !important;
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+            margin-top: 3mm !important;
           }
-          /* Compress IRR padding so it fits on one page */
-          .irr-section [class*="py-4"] { padding-top: 8px !important; padding-bottom: 8px !important; }
-          .irr-section [class*="py-3"] { padding-top: 6px !important; padding-bottom: 6px !important; }
-          .irr-section [class*="pb-6"] { padding-bottom: 14px !important; }
-          .irr-section table td,
-          .irr-section table th { padding-top: 4px !important; padding-bottom: 4px !important; }
           /* capital-summary intentionally allowed to split across pages */
 
           /* Chapter break only for Selskapstall */
@@ -6363,7 +6409,7 @@ function ReportPage({ data, setData, totals }) {
 
           {/* Selskapstall — EK-binding chart + tabell + IRR */}
           {(data.financials?.length || 0) > 0 && (
-            <section>
+            <section className="chapter-break">
               <SectionHeader num="07" title="Selskapstall" />
               <div className="mt-4">
                 <CapitalSummary financials={data.financials || []} />
@@ -6776,7 +6822,7 @@ function ReportKPI({ label, value, sub }) {
 function FactRow({ label, value }) {
   return (
     <div
-      className="fact-row flex justify-between items-baseline gap-4"
+      className="flex justify-between items-baseline gap-4"
       style={{ borderBottom: `1px dotted ${COL.borderSoft}`, padding: "5px 0" }}
     >
       <span
