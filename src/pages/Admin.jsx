@@ -5672,6 +5672,13 @@ function ReportPage({ data, setData, totals }) {
             @bottom-left  { content: ""; }
             @bottom-right { content: ""; }
           }
+          /* Last page (closing/back-cover): full-bleed treatment, no footer.
+             Selected via the "page: closing-page" property on .report-closing. */
+          @page closing-page {
+            margin: 0;
+            @bottom-left  { content: ""; }
+            @bottom-right { content: ""; }
+          }
 
           html, body {
             background: #F6F1E7 !important;
@@ -5728,13 +5735,16 @@ function ReportPage({ data, setData, totals }) {
           .report-cover h1 { font-size: 4.4rem !important; line-height: 1.02 !important; }
 
           /* ============ CLOSING PAGE ============ */
+          /* Dark navy fills page edge-to-edge via named page (margin: 0)
+             and full A4 min-height, matching the cover treatment. */
           .report-closing {
+            page: closing-page !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: space-between !important;
             margin: 0 !important;
-            padding: 22mm 20mm !important;
-            min-height: calc(297mm - 32mm) !important;
+            padding: 26mm 22mm 22mm 22mm !important;
+            min-height: 297mm !important;
             box-sizing: border-box !important;
             background: #0E1A2B !important;
             color: #F6F1E7 !important;
@@ -5742,6 +5752,8 @@ function ReportPage({ data, setData, totals }) {
             border-radius: 0 !important;
             break-before: page !important;
             page-break-before: always !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
           }
 
           /* ============ CONTENT FLOW ============ */

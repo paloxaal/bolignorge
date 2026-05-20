@@ -923,6 +923,15 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             @bottom-left  { content: ""; }
             @bottom-right { content: ""; }
           }
+          /* Last page (closing/back-cover): same treatment as cover so the
+             dark navy background bleeds to the page edges and the page
+             footer doesn't intrude into the signoff art. The page is
+             selected via the "page: closing-page" property on .report-closing. */
+          @page closing-page {
+            margin: 0;
+            @bottom-left  { content: ""; }
+            @bottom-right { content: ""; }
+          }
 
           html, body {
             background: #F6F1E7 !important;
@@ -983,15 +992,19 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           .cover-hero .cover-meta { font-size: 1.65rem !important; }
 
           /* ============ CLOSING PAGE ============ */
-          /* Closing renders on a normal page (with footer). The dark card
-             sits within the page margin like a framed signoff. */
+          /* Closing renders on a dedicated page using the named closing-page
+             @page rule (margin: 0, no footer) so the dark navy fills the
+             page edge-to-edge — same approach as the cover. min-height is
+             the full A4 height so the background covers the entire page
+             regardless of Chrome's quirky @page margin handling. */
           .report-closing {
+            page: closing-page !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: space-between !important;
             margin: 0 !important;
-            padding: 22mm 20mm !important;
-            min-height: calc(297mm - 32mm) !important;
+            padding: 26mm 22mm 22mm 22mm !important;
+            min-height: 297mm !important;
             box-sizing: border-box !important;
             background: #0E1A2B !important;
             color: #F6F1E7 !important;
@@ -999,6 +1012,8 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             border-radius: 0 !important;
             break-before: page !important;
             page-break-before: always !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
           }
 
           /* ============ CONTENT FLOW ============ */
