@@ -899,21 +899,21 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           /* Default page: A4 with margin + footer */
           @page {
             size: A4;
-            margin: 14mm 12mm 16mm 12mm;
+            margin: 14mm 12mm 18mm 12mm;
             @bottom-left {
               content: "Bolig Norge AS — Konfidensielt";
               font-family: 'JetBrains Mono', monospace;
               font-size: 8.5px;
               letter-spacing: 0.08em;
               color: #8A8270;
-              padding-bottom: 6mm;
+              padding-bottom: 8mm;
             }
             @bottom-right {
               content: counter(page) " / " counter(pages);
               font-family: 'JetBrains Mono', monospace;
               font-size: 8.5px;
               color: #8A8270;
-              padding-bottom: 6mm;
+              padding-bottom: 8mm;
             }
           }
           /* First page (cover): no margin, no footer — full bleed */
@@ -966,7 +966,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           .cover-hero {
             margin: 0 !important;
             padding: 26mm 22mm 22mm 22mm !important;
-            min-height: calc(297mm - 30mm) !important;
+            min-height: calc(297mm - 32mm) !important;
             box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
@@ -990,7 +990,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             justify-content: space-between !important;
             margin: 0 !important;
             padding: 22mm 20mm !important;
-            min-height: calc(297mm - 30mm) !important;
+            min-height: calc(297mm - 32mm) !important;
             box-sizing: border-box !important;
             background: #0E1A2B !important;
             color: #F6F1E7 !important;
@@ -1016,7 +1016,10 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
 
           /* Section headers stay with their first content */
           h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
-          p { orphans: 3; widows: 3; }
+          p, .report-flow > section > div, .market-text {
+            orphans: 4;
+            widows: 4;
+          }
 
           /* Tables don't split */
           table, .no-break, [data-no-break] {
@@ -1036,7 +1039,13 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             break-after: avoid !important;
             page-break-after: avoid !important;
           }
-          /* Keep the status paragraph from splitting mid-sentence */
+          /* Status label + paragraph stay together AND stay with header */
+          .project-status {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            break-before: avoid !important;
+            page-break-before: avoid !important;
+          }
           .project-block p {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
@@ -1045,18 +1054,22 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             max-height: 6.5cm !important;
             object-fit: cover;
           }
-          /* padding-top handles spacing — removed sibling margin-top to avoid double */
 
-          /* KPI grids should stay together as units */
+          /* KPI grids stay together as units */
           .kpi-grid {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
 
-          /* Chart panels (inside CapitalSummary etc.) stay together */
+          /* Chart panels stay together */
           .chart-panel {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+          }
+
+          /* Market outlook text — split allowed but with orphans/widows */
+          .market-text {
+            break-inside: auto;
           }
 
           /* IRR section — its own page, never split */
@@ -1740,7 +1753,7 @@ function DashboardPage({ data, totals }) {
             </div>
           )}
           <div
-            className="text-[15px] leading-[1.7] whitespace-pre-line"
+            className="market-text text-[15px] leading-[1.7] whitespace-pre-line"
             style={{ color: COL.inkSoft }}
           >
             {data.market.outlook}
@@ -2151,7 +2164,7 @@ function ProjectByProjectSection({ data, num }) {
               </div>
 
               {/* Status — full width below */}
-              <div>
+              <div className="project-status">
                 <div
                   className="text-[9.5px] tracking-[0.22em] uppercase mb-2"
                   style={{ color: COL.gold, fontFamily: "'JetBrains Mono', monospace" }}
