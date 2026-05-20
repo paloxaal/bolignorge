@@ -480,6 +480,381 @@ const fmtPct = (n) => {
   return n.toLocaleString("nb-NO", { maximumFractionDigits: 1 }) + " %";
 };
 
+// ============================================================
+// PRINT-SAFE SVG CHARTS
+// ------------------------------------------------------------
+// Recharts ResponsiveContainer often renders as 0px during
+// browser print (only the legend survives). These pure-SVG
+// components always render at their declared viewBox size and
+// scale via CSS, so they survive print. Rendered alongside
+// Recharts: Recharts on screen, SVG on print.
+// ============================================================
+function niceStep(raw) {
+  if (raw <= 0) return 1;
+  const exp = Math.pow(10, Math.floor(Math.log10(raw)));
+  const m = raw / exp;
+  const nice = m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10;
+  return nice * exp;
+}
+
+function PrintHBarChart({ data, series, colors, formatValue }) {
+  if (!data || data.length === 0) return null;
+  const fmt = formatValue || ((v) => v.toLocaleString("nb-NO"));
+  const max = Math.max(
+    1,
+    ...data.flatMap((row) => series.map((s) => Number(row[s]) || 0))
+  );
+  const padX = 14;
+  const labelW = 168;
+  const valueW = 78;
+  const chartW = 760;
+  const innerW = chartW - labelW - valueW - padX * 2;
+  const rowH = 44;
+  const barH = 13;
+  const gap = 4;
+  const headerH = 18;
+  const legendH = 28;
+  const totalH = headerH + data.length * rowH + legendH;
+
+  const niceMax = (() => {
+    const exp = Math.pow(10, Math.floor(Math.log10(max)));
+    const m = max / exp;
+    const nice = m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10;
+    return nice * exp;
+  })();
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * niceMax);
+
+  return (
+    <svg
+      viewBox={`0 0 ${chartW} ${totalH}`}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ width: "100%", height: "auto", display: "block" }}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {ticks.map((t, i) => {
+        const x = padX + labelW + (t / niceMax) * innerW;
+        return (
+          <g key={i}>
+            <text
+              x={x}
+              y={12}
+              textAnchor={i === 0 ? "start" : i === ticks.length - 1 ? "end" : "middle"}
+              fontFamily="'JetBrains Mono', monospace"
+              fontSize="9"
+              fill="#8A8270"
+            >
+              {fmt(t)}
+            </text>
+            <line
+              x1={x}
+              y1={headerH}
+              x2={x}
+              y2={headerH + data.length * rowH - 4}
+              stroke="#E6DCC4"
+              strokeWidth={0.6}
+              strokeDasharray={i === 0 ? "none" : "1 3"}
+            />
+          </g>
+        );
+      })}
+      {data.map((row, i) => {
+        const y0 = headerH + i * rowH;
+        const barsTotalH = series.length * barH + (series.length - 1) * gap;
+        const barsY0 = y0 + (rowH - barsTotalH) / 2;
+        return (
+          <g key={row.name}>
+            <text
+              x={padX + labelW - 8}
+              y={y0 + rowH / 2 + 4}
+              textAnchor="end"
+              fontFamily="'Manrope', sans-serif"
+              fontSize="11.5"
+              fill="#2A3850"
+            >
+              {row.name}
+            </text>
+            {series.map((s, sIdx) => {
+              const v = Number(row[s]) || 0;
+              const w = (v / niceMax) * innerW;
+              const by = barsY0 + sIdx * (barH + gap);
+              return (
+                <rect
+                  key={s}
+                  x={padX + labelW}
+                  y={by}
+                  width={Math.max(0.5, w)}
+                  height={barH}
+                  fill={colors[s]}
+                />
+              );
+            })}
+            <text
+              x={chartW - padX}
+              y={y0 + rowH / 2 + 4}
+              textAnchor="end"
+              fontFamily="'JetBrains Mono', monospace"
+              fontSize="10"
+              fill="#6B6452"
+            >
+              {fmt(Number(row[series[0]]) || 0)}
+            </text>
+          </g>
+        );
+      })}
+      <g transform={`translate(${padX + labelW}, ${headerH + data.length * rowH + 14})`}>
+        {series.map((s, i) => (
+          <g key={s} transform={`translate(${i * 110}, 0)`}>
+            <rect width={11} height={11} fill={colors[s]} />
+            <text
+              x={17}
+              y={9.5}
+              fontFamily="'JetBrains Mono', monospace"
+              fontSize="9.5"
+              fill="#6B6452"
+              letterSpacing="0.08em"
+            >
+              {s.toUpperCase()}
+            </text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+function PrintVBarChart({ data, xKey, series, colors, formatValue }) {
+  if (!data || data.length === 0) return null;
+  const fmt = formatValue || ((v) => v.toLocaleString("nb-NO"));
+  const values = data.flatMap((row) => series.map((s) => Number(row[s]) || 0));
+  const max = Math.max(1, ...values);
+  const min = Math.min(0, ...values);
+  const range = max - min;
+  const chartW = 760;
+  const chartH = 240;
+  const padL = 44;
+  const padR = 18;
+  const padT = 14;
+  const padB = 44;
+  const innerW = chartW - padL - padR;
+  const innerH = chartH - padT - padB;
+  const groupW = innerW / data.length;
+  const barW = Math.min(22, (groupW - 8) / series.length);
+  const yScale = (v) => padT + innerH - ((v - min) / range) * innerH;
+  const zeroY = yScale(0);
+
+  const ticks = [];
+  const step = niceStep(range / 4);
+  for (let v = Math.ceil(min / step) * step; v <= max; v += step) {
+    ticks.push(v);
+  }
+
+  return (
+    <svg
+      viewBox={`0 0 ${chartW} ${chartH + 32}`}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ width: "100%", height: "auto", display: "block" }}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {ticks.map((t, i) => {
+        const y = yScale(t);
+        return (
+          <g key={i}>
+            <line x1={padL} y1={y} x2={padL + innerW} y2={y} stroke="#E6DCC4" strokeWidth={0.6} strokeDasharray={t === 0 ? "none" : "1 3"} />
+            <text
+              x={padL - 6}
+              y={y + 3}
+              textAnchor="end"
+              fontFamily="'JetBrains Mono', monospace"
+              fontSize="9"
+              fill="#8A8270"
+            >
+              {fmt(t)}
+            </text>
+          </g>
+        );
+      })}
+      {data.map((row, i) => {
+        const gx = padL + i * groupW + groupW / 2;
+        return (
+          <g key={i}>
+            {series.map((s, sIdx) => {
+              const v = Number(row[s]) || 0;
+              const y = yScale(Math.max(v, 0));
+              const h = Math.abs(yScale(v) - zeroY);
+              const x = gx - (series.length * barW) / 2 + sIdx * barW + 1;
+              return (
+                <rect
+                  key={s}
+                  x={x}
+                  y={v >= 0 ? y : zeroY}
+                  width={barW - 2}
+                  height={Math.max(1, h)}
+                  fill={colors[s]}
+                />
+              );
+            })}
+            <text
+              x={gx}
+              y={chartH - padB + 16}
+              textAnchor="middle"
+              fontFamily="'JetBrains Mono', monospace"
+              fontSize="9.5"
+              fill="#6B6452"
+            >
+              {row[xKey]}
+            </text>
+          </g>
+        );
+      })}
+      <g transform={`translate(${padL}, ${chartH + 12})`}>
+        {series.map((s, i) => (
+          <g key={s} transform={`translate(${i * 120}, 0)`}>
+            <rect width={11} height={11} fill={colors[s]} />
+            <text
+              x={17}
+              y={9.5}
+              fontFamily="'JetBrains Mono', monospace"
+              fontSize="9.5"
+              fill="#6B6452"
+              letterSpacing="0.08em"
+            >
+              {s.toUpperCase()}
+            </text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+function PrintLineChart({ data, xKey, series, colors, dashes, formatValue }) {
+  if (!data || data.length === 0) return null;
+  const fmt = formatValue || ((v) => v.toLocaleString("nb-NO"));
+  const values = data.flatMap((row) => series.map((s) => Number(row[s]) || 0));
+  const max = Math.max(1, ...values);
+  const min = Math.min(0, ...values);
+  const range = max - min;
+  const chartW = 760;
+  const chartH = 240;
+  const padL = 50;
+  const padR = 18;
+  const padT = 14;
+  const padB = 44;
+  const innerW = chartW - padL - padR;
+  const innerH = chartH - padT - padB;
+  const xStep = data.length > 1 ? innerW / (data.length - 1) : 0;
+  const yScale = (v) => padT + innerH - ((v - min) / range) * innerH;
+
+  const ticks = [];
+  const step = niceStep(range / 4);
+  for (let v = Math.ceil(min / step) * step; v <= max; v += step) {
+    ticks.push(v);
+  }
+
+  const buildPath = (key) => {
+    const pts = data
+      .map((row, i) => {
+        const v = Number(row[key]);
+        if (v === null || v === undefined || isNaN(v)) return null;
+        return { x: padL + i * xStep, y: yScale(v) };
+      })
+      .filter(Boolean);
+    if (pts.length === 0) return "";
+    return "M" + pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" L");
+  };
+
+  return (
+    <svg
+      viewBox={`0 0 ${chartW} ${chartH + 32}`}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ width: "100%", height: "auto", display: "block" }}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {ticks.map((t, i) => {
+        const y = yScale(t);
+        return (
+          <g key={i}>
+            <line x1={padL} y1={y} x2={padL + innerW} y2={y} stroke="#E6DCC4" strokeWidth={0.6} strokeDasharray={t === 0 ? "none" : "1 3"} />
+            <text
+              x={padL - 6}
+              y={y + 3}
+              textAnchor="end"
+              fontFamily="'JetBrains Mono', monospace"
+              fontSize="9"
+              fill="#8A8270"
+            >
+              {fmt(t)}
+            </text>
+          </g>
+        );
+      })}
+      {data.map((row, i) => (
+        <text
+          key={i}
+          x={padL + i * xStep}
+          y={chartH - padB + 16}
+          textAnchor="middle"
+          fontFamily="'JetBrains Mono', monospace"
+          fontSize="9.5"
+          fill="#6B6452"
+        >
+          {row[xKey]}
+        </text>
+      ))}
+      {series.map((s) => (
+        <path
+          key={s}
+          d={buildPath(s)}
+          fill="none"
+          stroke={colors[s]}
+          strokeWidth={s === series[0] ? 2.4 : 1.8}
+          strokeDasharray={(dashes && dashes[s]) || "none"}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+      {data.map((row, i) => {
+        const v = Number(row[series[0]]);
+        if (v === null || v === undefined || isNaN(v)) return null;
+        return (
+          <circle
+            key={i}
+            cx={padL + i * xStep}
+            cy={yScale(v)}
+            r={2.5}
+            fill={colors[series[0]]}
+          />
+        );
+      })}
+      <g transform={`translate(${padL}, ${chartH + 12})`}>
+        {series.map((s, i) => (
+          <g key={s} transform={`translate(${i * 140}, 0)`}>
+            <line
+              x1={0}
+              y1={6}
+              x2={18}
+              y2={6}
+              stroke={colors[s]}
+              strokeWidth={2}
+              strokeDasharray={(dashes && dashes[s]) || "none"}
+            />
+            <text
+              x={24}
+              y={9.5}
+              fontFamily="'JetBrains Mono', monospace"
+              fontSize="9.5"
+              fill="#6B6452"
+              letterSpacing="0.08em"
+            >
+              {s.toUpperCase()}
+            </text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
 // ---------------- ROOT APP ----------------
 function AdminDashboard() {
   const { profile, signOut } = useAuth();
@@ -1336,43 +1711,52 @@ function DashboardPage({ data, setData, totals }) {
               Beløp i mNOK
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={Math.max(280, chartData.length * 42)}>
-            <BarChart
+          <div className="screen-only">
+            <ResponsiveContainer width="100%" height={Math.max(280, chartData.length * 42)}>
+              <BarChart
+                data={chartData}
+                layout="vertical"
+                margin={{ top: 10, right: 30, left: 110, bottom: 10 }}
+              >
+                <CartesianGrid stroke={COL.borderSoft} horizontal={false} />
+                <XAxis
+                  type="number"
+                  stroke={COL.muted}
+                  fontSize={11}
+                  tickFormatter={(v) => v.toLocaleString("nb-NO")}
+                />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  stroke={COL.inkSoft}
+                  fontSize={12}
+                  width={100}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: COL.paper,
+                    border: `1px solid ${COL.border}`,
+                    fontSize: 12,
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}
+                  formatter={(v) => v.toLocaleString("nb-NO") + " mNOK"}
+                />
+                <Legend
+                  wrapperStyle={{ fontSize: 11, paddingTop: 10 }}
+                  iconType="square"
+                />
+                <Bar dataKey="Omsetning" fill={COL.ink} radius={[0, 2, 2, 0]} />
+                <Bar dataKey="DB" fill={COL.gold} radius={[0, 2, 2, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="print-only">
+            <PrintHBarChart
               data={chartData}
-              layout="vertical"
-              margin={{ top: 10, right: 30, left: 110, bottom: 10 }}
-            >
-              <CartesianGrid stroke={COL.borderSoft} horizontal={false} />
-              <XAxis
-                type="number"
-                stroke={COL.muted}
-                fontSize={11}
-                tickFormatter={(v) => v.toLocaleString("nb-NO")}
-              />
-              <YAxis
-                dataKey="name"
-                type="category"
-                stroke={COL.inkSoft}
-                fontSize={12}
-                width={100}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: COL.paper,
-                  border: `1px solid ${COL.border}`,
-                  fontSize: 12,
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}
-                formatter={(v) => v.toLocaleString("nb-NO") + " mNOK"}
-              />
-              <Legend
-                wrapperStyle={{ fontSize: 11, paddingTop: 10 }}
-                iconType="square"
-              />
-              <Bar dataKey="Omsetning" fill={COL.ink} radius={[0, 2, 2, 0]} />
-              <Bar dataKey="DB" fill={COL.gold} radius={[0, 2, 2, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+              series={["Omsetning", "DB"]}
+              colors={{ Omsetning: COL.ink, DB: COL.gold }}
+            />
+          </div>
         </div>
       </section>
 
@@ -1895,7 +2279,7 @@ function CapitalSummary({ financials }) {
 
   return (
     <div
-      className="border"
+      className="border capital-summary"
       style={{ borderColor: COL.border, background: COL.card }}
     >
       <div
@@ -1973,37 +2357,47 @@ function CapitalSummary({ financials }) {
           >
             Årlig flyt — resultat og utbytte (mNOK)
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <ComposedChart
+          <div className="screen-only">
+            <ResponsiveContainer width="100%" height={200}>
+              <ComposedChart
+                data={chartData}
+                margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                barCategoryGap="20%"
+              >
+                <CartesianGrid stroke={COL.borderSoft} vertical={false} />
+                <XAxis
+                  dataKey="year"
+                  stroke={COL.muted}
+                  fontSize={11}
+                  tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+                />
+                <YAxis
+                  stroke={COL.muted}
+                  fontSize={11}
+                  tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: COL.paper,
+                    border: `1px solid ${COL.border}`,
+                    fontSize: 12,
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} iconType="square" />
+                <Bar dataKey="Årsresultat" fill={COL.ink} maxBarSize={28} />
+                <Bar dataKey="Utbytte" fill={COL.goldSoft} maxBarSize={28} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="print-only">
+            <PrintVBarChart
               data={chartData}
-              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
-              barCategoryGap="20%"
-            >
-              <CartesianGrid stroke={COL.borderSoft} vertical={false} />
-              <XAxis
-                dataKey="year"
-                stroke={COL.muted}
-                fontSize={11}
-                tick={{ fontFamily: "'JetBrains Mono', monospace" }}
-              />
-              <YAxis
-                stroke={COL.muted}
-                fontSize={11}
-                tick={{ fontFamily: "'JetBrains Mono', monospace" }}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: COL.paper,
-                  border: `1px solid ${COL.border}`,
-                  fontSize: 12,
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: 11 }} iconType="square" />
-              <Bar dataKey="Årsresultat" fill={COL.ink} maxBarSize={28} />
-              <Bar dataKey="Utbytte" fill={COL.goldSoft} maxBarSize={28} />
-            </ComposedChart>
-          </ResponsiveContainer>
+              xKey="year"
+              series={["Årsresultat", "Utbytte"]}
+              colors={{ Årsresultat: COL.ink, Utbytte: COL.goldSoft }}
+            />
+          </div>
         </div>
 
         {/* Panel 2: Lines — cumulative stock */}
@@ -2017,57 +2411,76 @@ function CapitalSummary({ financials }) {
           >
             Akkumulert — bokført EK og kumulative tall (mNOK)
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <ComposedChart
+          <div className="screen-only">
+            <ResponsiveContainer width="100%" height={200}>
+              <ComposedChart
+                data={chartData}
+                margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+              >
+                <CartesianGrid stroke={COL.borderSoft} vertical={false} />
+                <XAxis
+                  dataKey="year"
+                  stroke={COL.muted}
+                  fontSize={11}
+                  tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+                />
+                <YAxis
+                  stroke={COL.muted}
+                  fontSize={11}
+                  tick={{ fontFamily: "'JetBrains Mono', monospace" }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: COL.paper,
+                    border: `1px solid ${COL.border}`,
+                    fontSize: 12,
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} iconType="line" />
+                <Line
+                  type="monotone"
+                  dataKey="Bokført EK"
+                  stroke={COL.sage}
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: COL.sage }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="Akk. utbytte"
+                  stroke={COL.gold}
+                  strokeWidth={1.75}
+                  strokeDasharray="3 4"
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="Akk. resultat"
+                  stroke={COL.burgundy}
+                  strokeWidth={1.75}
+                  strokeDasharray="5 4"
+                  dot={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="print-only">
+            <PrintLineChart
               data={chartData}
-              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
-            >
-              <CartesianGrid stroke={COL.borderSoft} vertical={false} />
-              <XAxis
-                dataKey="year"
-                stroke={COL.muted}
-                fontSize={11}
-                tick={{ fontFamily: "'JetBrains Mono', monospace" }}
-              />
-              <YAxis
-                stroke={COL.muted}
-                fontSize={11}
-                tick={{ fontFamily: "'JetBrains Mono', monospace" }}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: COL.paper,
-                  border: `1px solid ${COL.border}`,
-                  fontSize: 12,
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: 11 }} iconType="line" />
-              <Line
-                type="monotone"
-                dataKey="Bokført EK"
-                stroke={COL.sage}
-                strokeWidth={2.5}
-                dot={{ r: 3, fill: COL.sage }}
-              />
-              <Line
-                type="monotone"
-                dataKey="Akk. utbytte"
-                stroke={COL.gold}
-                strokeWidth={1.75}
-                strokeDasharray="3 4"
-                dot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="Akk. resultat"
-                stroke={COL.burgundy}
-                strokeWidth={1.75}
-                strokeDasharray="5 4"
-                dot={false}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+              xKey="year"
+              series={["Bokført EK", "Akk. utbytte", "Akk. resultat"]}
+              colors={{
+                "Bokført EK": COL.sage,
+                "Akk. utbytte": COL.gold,
+                "Akk. resultat": COL.burgundy,
+              }}
+              dashes={{
+                "Bokført EK": "none",
+                "Akk. utbytte": "3 4",
+                "Akk. resultat": "5 4",
+              }}
+            />
+          </div>
         </div>
       </div>
 
@@ -5228,34 +5641,112 @@ function ReportPage({ data, setData, totals }) {
     <div className="space-y-6">
       {/* Print stylesheet */}
       <style>{`
+        @media screen {
+          .print-only { display: none !important; }
+        }
         @media print {
+          /* DEFAULT PAGE — body content with footer */
           @page {
             size: A4;
-            margin: 1cm;
-            @bottom-right {
-              content: counter(page) " / " counter(pages);
-              font-family: 'JetBrains Mono', monospace;
-              font-size: 9px;
-              color: #6B6452;
-            }
+            margin: 14mm 12mm 16mm 12mm;
             @bottom-left {
               content: "Bolig Norge AS — Konfidensielt";
               font-family: 'JetBrains Mono', monospace;
-              font-size: 9px;
-              color: #6B6452;
+              font-size: 8.5px;
+              letter-spacing: 0.08em;
+              color: #8A8270;
+              padding-bottom: 6mm;
+            }
+            @bottom-right {
+              content: counter(page) " / " counter(pages);
+              font-family: 'JetBrains Mono', monospace;
+              font-size: 8.5px;
+              color: #8A8270;
+              padding-bottom: 6mm;
             }
           }
-          html, body { background: #fafaf7 !important; }
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          .print\\:hidden { display: none !important; }
-          main { padding: 0 !important; }
-          /* Tighter side padding in print — match print margins for fuller content width */
-          .report-cover, .report-content { padding-left: 1.2cm !important; padding-right: 1.2cm !important; }
-          .report-cover { padding-top: 2cm !important; padding-bottom: 2cm !important; }
-          .report-content { padding-top: 1cm !important; padding-bottom: 1cm !important; }
+          /* COVERPAGE — full-bleed, no margins, no footer */
+          @page coverpage {
+            size: A4;
+            margin: 0;
+            @bottom-left  { content: ""; }
+            @bottom-right { content: ""; }
+          }
+
+          html, body {
+            background: #F6F1E7 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* Hide site chrome */
+          .print\\:hidden,
+          aside,
+          body header:not([data-report="keep"]),
+          body nav:not([data-report="keep"]),
+          body footer:not([data-report="keep"]) {
+            display: none !important;
+          }
+
+          /* Reset main padding */
+          main { padding: 0 !important; margin: 0 !important; }
+
+          /* Show / hide print-only elements */
+          .screen-only { display: none !important; }
+          .print-only { display: block !important; }
+
+          /* ---------- COVER & CLOSING ---------- */
+          .report-cover,
+          .report-closing {
+            page: coverpage !important;
+            box-sizing: border-box !important;
+            width: 210mm !important;
+            min-height: 297mm !important;
+            margin: 0 !important;
+            padding: 26mm 22mm 22mm 22mm !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            background: #0E1A2B !important;
+            color: #F6F1E7 !important;
+            border: none !important;
+            border-radius: 0 !important;
+          }
+          .report-cover {
+            break-after: page !important;
+            page-break-after: always !important;
+          }
+          .report-closing {
+            display: flex !important;
+            break-before: page !important;
+            page-break-before: always !important;
+          }
+          .report-cover h1 { font-size: 4.4rem !important; line-height: 1.02 !important; }
+
+          /* ---------- CONTENT FLOW ---------- */
+          .report-content {
+            padding: 0 !important;
+            margin: 0 !important;
+            background: #F6F1E7 !important;
+          }
+          .report-content > * + * { margin-top: 9mm !important; }
+
+          /* Section breaks */
           section { break-inside: auto; }
           h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
-          /* Allow project narrative to flow naturally, but keep image+facts together */
+          p { orphans: 3; widows: 3; }
+
+          /* Tables don't split */
+          table, .no-break, [data-no-break] {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          /* Project blocks */
           .project-block { break-inside: auto !important; page-break-inside: auto !important; }
           .project-block-header {
             break-inside: avoid !important;
@@ -5264,24 +5755,31 @@ function ReportPage({ data, setData, totals }) {
             page-break-after: avoid !important;
           }
           .project-block img {
-            max-height: 8.5cm !important;
+            max-height: 7.5cm !important;
             object-fit: cover;
           }
-          /* Cap KPI rows — keep together */
-          .keep-together,
-          table thead,
-          table, .no-break, [data-no-break] {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-          /* IRR section — always new page */
+          .project-block + .project-block { margin-top: 8mm !important; }
+
+          /* IRR always new page */
           .irr-section {
             break-before: page !important;
             page-break-before: always !important;
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
-          /* Recharts/SVG charts must fit page width */
+          /* Capital summary stays together */
+          .capital-summary {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          /* Chapter breaks */
+          .chapter-break {
+            break-before: page !important;
+            page-break-before: always !important;
+          }
+
+          /* Recharts fit */
           .recharts-responsive-container,
           .recharts-wrapper,
           svg.recharts-surface {
@@ -5289,31 +5787,12 @@ function ReportPage({ data, setData, totals }) {
             width: 100% !important;
             height: auto !important;
           }
-          /* Hide site chrome */
-          body header:not([data-report="keep"]),
-          body nav:not([data-report="keep"]),
-          body footer:not([data-report="keep"]) {
-            display: none !important;
-          }
-          /* Cover: own page + fill height */
-          .report-cover {
-            break-after: page;
-            page-break-after: always;
-            min-height: calc(297mm - 2.4cm) !important;
-          }
-          /* Chapter breaks: §03 Prosjekt for prosjekt and §07 Selskapstall start fresh */
-          .chapter-break {
-            break-before: page !important;
-            page-break-before: always !important;
-          }
-          /* Tighter section gaps in print */
-          .report-content > * + * { margin-top: 0.9cm !important; }
-          /* Avoid orphans/widows */
-          p { orphans: 3; widows: 3; }
-          /* Hide screen-only end footer in print (we use @page footer instead) */
+
+          img { max-width: 100% !important; }
+
           .report-screen-footer { display: none !important; }
           /* Show closing card only in print, not on screen */
-          .report-closing { display: block !important; break-before: page !important; page-break-before: always !important; }
+          .report-closing { display: flex !important; }
         }
       `}</style>
 
@@ -5491,14 +5970,14 @@ function ReportPage({ data, setData, totals }) {
           style={{
             background: COL.ink,
             color: COL.paper,
-            minHeight: "320px",
+            minHeight: "420px",
           }}
         >
           {/* Top: confidentiality + logo */}
           <div className="flex justify-between items-start">
             <div
-              className="text-[10px] tracking-[0.25em] uppercase"
-              style={{ opacity: 0.55 }}
+              className="text-[10px] tracking-[0.28em] uppercase"
+              style={{ opacity: 0.5 }}
             >
               Konfidensielt — kun for interne formål
             </div>
@@ -5506,39 +5985,40 @@ function ReportPage({ data, setData, totals }) {
           </div>
 
           {/* Middle: title block */}
-          <div className="mt-16">
+          <div className="mt-12">
             <div
-              className="mb-4"
+              className="mb-5"
               style={{
-                width: 48,
-                height: 1,
+                width: 56,
+                height: 1.5,
                 background: COL.goldSoft,
                 opacity: 0.85,
               }}
             />
             <div
-              className="text-[11px] tracking-[0.32em] uppercase mb-3"
-              style={{ opacity: 0.7, color: COL.goldSoft }}
+              className="text-[11px] tracking-[0.36em] uppercase mb-4"
+              style={{ opacity: 0.72, color: COL.goldSoft }}
             >
               Månedsrapport
             </div>
             <h1
-              className="text-6xl mb-2"
+              className="text-7xl mb-3"
               style={{
                 fontFamily: "'Playfair Display', serif",
                 fontWeight: 400,
-                letterSpacing: "-0.02em",
-                lineHeight: 1.05,
+                letterSpacing: "-0.025em",
+                lineHeight: 1.02,
               }}
             >
               {data.meta.reportPeriod}
             </h1>
             <div
-              className="text-2xl"
+              className="text-3xl"
               style={{
                 fontFamily: "'Playfair Display', serif",
                 fontWeight: 300,
-                opacity: 0.78,
+                opacity: 0.82,
+                letterSpacing: "-0.01em",
               }}
             >
               {data.meta.companyName} · {data.meta.reportYear}
@@ -5547,7 +6027,7 @@ function ReportPage({ data, setData, totals }) {
 
           {/* Bottom: metadata stamp — print only */}
           <div
-            className="hidden print:flex justify-between items-end text-[10px] tracking-[0.2em] uppercase"
+            className="hidden print:flex justify-between items-end text-[10px] tracking-[0.22em] uppercase"
             style={{ opacity: 0.45, fontFamily: "'JetBrains Mono', monospace" }}
           >
             <span>
@@ -5930,8 +6410,8 @@ function ReportPage({ data, setData, totals }) {
         >
           <div className="flex justify-between items-start">
             <div
-              className="text-[10px] tracking-[0.25em] uppercase"
-              style={{ opacity: 0.55 }}
+              className="text-[10px] tracking-[0.28em] uppercase"
+              style={{ opacity: 0.5 }}
             >
               Rapport slutt
             </div>
@@ -5940,33 +6420,33 @@ function ReportPage({ data, setData, totals }) {
 
           <div className="my-12">
             <div
-              className="mb-4"
+              className="mb-5"
               style={{
-                width: 48,
-                height: 1,
+                width: 56,
+                height: 1.5,
                 background: COL.goldSoft,
                 opacity: 0.85,
               }}
             />
             <div
-              className="text-[11px] tracking-[0.32em] uppercase mb-3"
-              style={{ opacity: 0.7, color: COL.goldSoft }}
+              className="text-[11px] tracking-[0.36em] uppercase mb-4"
+              style={{ opacity: 0.72, color: COL.goldSoft }}
             >
               Månedsrapport · {data.meta.reportPeriod} {data.meta.reportYear}
             </div>
             <div
-              className="text-3xl mb-3"
+              className="text-4xl mb-4"
               style={{
                 fontFamily: "'Playfair Display', serif",
                 fontWeight: 400,
-                letterSpacing: "-0.015em",
+                letterSpacing: "-0.02em",
               }}
             >
               {data.meta.companyName}
             </div>
             <div
-              className="text-[13px] leading-[1.7] max-w-md"
-              style={{ opacity: 0.7 }}
+              className="text-[13px] leading-[1.75] max-w-md"
+              style={{ opacity: 0.72 }}
             >
               Dette dokumentet er konfidensielt styremateriale og skal ikke
               videreformidles uten skriftlig samtykke. Tall og prognoser er
@@ -5976,7 +6456,7 @@ function ReportPage({ data, setData, totals }) {
           </div>
 
           <div
-            className="flex justify-between items-end text-[10px] tracking-[0.2em] uppercase"
+            className="flex justify-between items-end text-[10px] tracking-[0.22em] uppercase"
             style={{ opacity: 0.45, fontFamily: "'JetBrains Mono', monospace" }}
           >
             <span>
@@ -6013,7 +6493,7 @@ function ProjectByProjectSection({ data, num }) {
   return (
     <section>
       <SectionHeader num={num} title="Prosjekt for prosjekt" />
-      <div className="mt-6 space-y-10">
+      <div className="mt-6 space-y-8 print:space-y-6">
         {projects.map((p) => {
           const sold = Number(p.unitsSold) || 0;
           const total = Number(p.units) || 0;
@@ -6021,24 +6501,44 @@ function ProjectByProjectSection({ data, num }) {
           return (
             <div
               key={p.id}
-              className="pb-10 project-block"
+              className="pb-8 print:pb-6 project-block"
               style={{ borderBottom: `1px solid ${COL.borderSoft}` }}
             >
               <div className="project-block-header">
-                {/* Header: name + location */}
-                <div className="mb-5">
-                  <h4
-                    className="text-2xl mb-1"
+                {/* Header: name + location with gold dot accent */}
+                <div className="mb-4 flex items-baseline gap-3">
+                  <span
                     style={{
-                      fontFamily: "'Playfair Display', serif",
-                      fontWeight: 500,
-                      color: COL.ink,
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: COL.gold,
+                      display: "inline-block",
+                      flexShrink: 0,
+                      marginTop: 6,
                     }}
-                  >
-                    {p.name}
-                  </h4>
-                  <div className="text-xs" style={{ color: COL.muted }}>
-                    {p.location}
+                  />
+                  <div>
+                    <h4
+                      className="text-[26px] print:text-[22px] leading-none mb-1"
+                      style={{
+                        fontFamily: "'Playfair Display', serif",
+                        fontWeight: 500,
+                        color: COL.ink,
+                        letterSpacing: "-0.012em",
+                      }}
+                    >
+                      {p.name}
+                    </h4>
+                    <div
+                      className="text-[10px] tracking-[0.18em] uppercase"
+                      style={{
+                        color: COL.muted,
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}
+                    >
+                      {p.location}
+                    </div>
                   </div>
                 </div>
 
@@ -6046,8 +6546,8 @@ function ProjectByProjectSection({ data, num }) {
                 <div
                   className={
                     p.imageUrl
-                      ? "grid grid-cols-1 md:grid-cols-2 gap-6 mb-6"
-                      : "mb-6"
+                      ? "grid grid-cols-1 md:grid-cols-2 gap-6 mb-5"
+                      : "mb-5"
                   }
                 >
                   {p.imageUrl && (
@@ -6064,7 +6564,7 @@ function ProjectByProjectSection({ data, num }) {
                       />
                     </div>
                   )}
-                  <div className="space-y-1.5 text-xs">
+                  <div className="text-xs">
                     <FactRow
                       label="Antall boliger"
                       value={total > 0 ? total : "—"}
@@ -6110,8 +6610,8 @@ function ProjectByProjectSection({ data, num }) {
                         href={p.website}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block mt-2 text-xs"
-                        style={{ color: COL.gold }}
+                        className="block mt-3 text-[11px] tracking-[0.06em]"
+                        style={{ color: COL.gold, fontFamily: "'JetBrains Mono', monospace" }}
                       >
                         {p.website.replace(/^https?:\/\//, "")} ↗
                       </a>
@@ -6123,8 +6623,8 @@ function ProjectByProjectSection({ data, num }) {
               {/* Status — full width below */}
               <div>
                 <div
-                  className="text-[10px] tracking-[0.2em] uppercase mb-2"
-                  style={{ color: COL.muted }}
+                  className="text-[9.5px] tracking-[0.22em] uppercase mb-2"
+                  style={{ color: COL.gold, fontFamily: "'JetBrains Mono', monospace" }}
                 >
                   Status
                 </div>
@@ -6148,11 +6648,11 @@ function ProjectByProjectSection({ data, num }) {
 function SectionHeader({ num, title }) {
   return (
     <div
-      className="flex items-baseline gap-4 pb-2"
+      className="flex items-baseline gap-4 pb-3"
       style={{ borderBottom: `1px solid ${COL.border}` }}
     >
       <span
-        className="text-[10px] tracking-[0.25em] uppercase"
+        className="text-[10px] tracking-[0.28em] uppercase"
         style={{ color: COL.gold, fontFamily: "'JetBrains Mono', monospace" }}
       >
         §{num}
@@ -6162,7 +6662,7 @@ function SectionHeader({ num, title }) {
         style={{
           fontFamily: "'Playfair Display', serif",
           fontWeight: 500,
-          letterSpacing: "-0.01em",
+          letterSpacing: "-0.012em",
           color: COL.ink,
         }}
       >
@@ -6173,27 +6673,27 @@ function SectionHeader({ num, title }) {
 }
 function ReportKPI({ label, value, sub }) {
   return (
-    <div className="px-5 py-5" style={{ background: COL.paper }}>
+    <div className="px-6 py-6" style={{ background: COL.paper }}>
       <div
-        className="text-[9px] tracking-[0.2em] uppercase mb-2"
-        style={{ color: COL.muted }}
+        className="text-[9.5px] tracking-[0.22em] uppercase mb-3"
+        style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
       >
         {label}
       </div>
       <div
-        className="text-[26px] leading-none"
+        className="text-[30px] leading-none"
         style={{
           fontFamily: "'Playfair Display', serif",
           fontWeight: 500,
           color: COL.ink,
-          letterSpacing: "-0.02em",
+          letterSpacing: "-0.022em",
         }}
       >
         {value}
       </div>
       {sub && (
         <div
-          className="mt-2 text-[10px]"
+          className="mt-2.5 text-[9.5px] tracking-[0.18em] uppercase"
           style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
         >
           {sub}
@@ -6205,12 +6705,12 @@ function ReportKPI({ label, value, sub }) {
 function FactRow({ label, value }) {
   return (
     <div
-      className="flex justify-between items-baseline"
-      style={{ borderBottom: `1px dotted ${COL.borderSoft}`, padding: "4px 0" }}
+      className="flex justify-between items-baseline gap-4"
+      style={{ borderBottom: `1px dotted ${COL.borderSoft}`, padding: "5px 0" }}
     >
       <span
-        className="text-[10px] tracking-[0.1em] uppercase"
-        style={{ color: COL.muted }}
+        className="text-[9.5px] tracking-[0.14em] uppercase"
+        style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
       >
         {label}
       </span>
