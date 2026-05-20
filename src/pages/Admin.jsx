@@ -534,15 +534,7 @@ function AdminDashboard() {
     if (!data || loading) return;
     setSaveStatus("saving");
     const t = setTimeout(async () => {
-      // Snapshot what we're about to save for debugging
-      const projSnapshot = (data.projects || []).map((p) => ({
-        id: p.id,
-        statusShort: p.statusShort,
-        statusLongLen: (p.statusLong || "").length,
-      }));
-      console.log("[autosave] firing — projects snapshot:", projSnapshot);
       const result = await storage.set(STORAGE_KEY, JSON.stringify(data));
-      console.log("[autosave] result:", result);
       if (result?.ok) {
         setSaveStatus("saved");
         setSaveError(null);
@@ -579,19 +571,10 @@ function AdminDashboard() {
   ];
 
   const updateProject = (id, patch) => {
-    console.log("[updateProject] called with id:", id, "patch keys:", Object.keys(patch || {}));
-    setData((d) => {
-      const found = d.projects.find((p) => p.id === id);
-      if (!found) {
-        console.error("[updateProject] no project found for id:", id, "— available ids:", d.projects.map(p => p.id));
-        return d;
-      }
-      const newProjects = d.projects.map((p) => (p.id === id ? { ...p, ...patch } : p));
-      const updated = newProjects.find((p) => p.id === id);
-      console.log("[updateProject] before:", { statusShort: found.statusShort, statusLong: (found.statusLong || "").slice(0, 50) });
-      console.log("[updateProject] after:", { statusShort: updated.statusShort, statusLong: (updated.statusLong || "").slice(0, 50) });
-      return { ...d, projects: newProjects };
-    });
+    setData((d) => ({
+      ...d,
+      projects: d.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    }));
   };
   const addProject = () => {
     const id = "p_" + Math.random().toString(36).slice(2, 8);
@@ -3118,7 +3101,7 @@ function ProjectEditModal({ project, onSave, onDelete, onClose }) {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Status (kort)">
+            <Field label="Statuspill — kort (portefølje-tabell)">
               <Input
                 value={draft.statusShort}
                 onChange={(v) => update("statusShort", v)}
@@ -3132,6 +3115,22 @@ function ProjectEditModal({ project, onSave, onDelete, onClose }) {
               />
             </Field>
           </div>
+
+          <Field label="Statustekst — narrativ (månedsrapport → prosjekt for prosjekt)">
+            <textarea
+              value={draft.statusLong || ""}
+              onChange={(e) => update("statusLong", e.target.value)}
+              rows={6}
+              className="w-full p-3 text-sm border resize-y"
+              style={{
+                background: COL.card,
+                borderColor: COL.border,
+                color: COL.inkSoft,
+                lineHeight: 1.6,
+              }}
+              placeholder="Fortellende statustekst som vises i månedsrapportens 'Prosjekt for prosjekt'-seksjon."
+            />
+          </Field>
 
           <div className="grid grid-cols-3 gap-4">
             <Field label="Partner">
@@ -3223,21 +3222,6 @@ function ProjectEditModal({ project, onSave, onDelete, onClose }) {
               value={draft.website}
               onChange={(v) => update("website", v)}
               placeholder="https://"
-            />
-          </Field>
-
-          <Field label="Statustekst (lang)">
-            <textarea
-              value={draft.statusLong}
-              onChange={(e) => update("statusLong", e.target.value)}
-              rows={6}
-              className="w-full p-3 text-sm border resize-y"
-              style={{
-                background: COL.card,
-                borderColor: COL.border,
-                color: COL.inkSoft,
-                lineHeight: 1.6,
-              }}
             />
           </Field>
         </div>
@@ -5158,18 +5142,6 @@ function ReportPage({ data, setData, totals }) {
 
       const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000); // +2 dager
 
-      // Debug
-      console.log("[share] snapshotting — meta:", snapshotData.meta);
-      console.log("[share] snapshotting — projects (first 3):",
-        (snapshotData.projects || []).slice(0, 3).map(p => ({
-          id: p.id,
-          name: p.name,
-          statusShort: p.statusShort,
-          statusLongLen: (p.statusLong || "").length,
-          statusLongPreview: (p.statusLong || "").slice(0, 80),
-        }))
-      );
-
       const { error } = await supabase.from("share_tokens").insert({
         token,
         snapshot: snapshotData,
@@ -5179,7 +5151,6 @@ function ReportPage({ data, setData, totals }) {
       if (error) throw error;
 
       const url = `${window.location.origin}/styreportal/share/${token}`;
-      console.log("[share] inserted with token:", token, "URL:", url);
       setShareLink({ url, expiresAt });
     } catch (e) {
       console.error("[share] generate failed:", e.message);
