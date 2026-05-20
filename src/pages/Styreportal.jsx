@@ -960,12 +960,13 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           .print-only { display: block !important; }
 
           /* ============ COVER PAGE ============ */
-          /* On first page only — @page :first removes the 14/12mm margin
-             so the cover element naturally fills 210x297mm. */
+          /* @page :first removes the footer but Chrome ignores margin
+             overrides inside @page :first, so we size the cover to fit
+             within the standard @page margin (297mm - 14mm - 16mm = 267mm). */
           .cover-hero {
             margin: 0 !important;
             padding: 26mm 22mm 22mm 22mm !important;
-            min-height: 297mm !important;
+            min-height: calc(297mm - 30mm) !important;
             box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
@@ -1027,6 +1028,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           .project-block {
             break-inside: auto !important;
             page-break-inside: auto !important;
+            padding-top: 5mm !important;
           }
           .project-block-header {
             break-inside: avoid !important;
@@ -1038,7 +1040,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             max-height: 6.5cm !important;
             object-fit: cover;
           }
-          .project-block + .project-block { margin-top: 6mm !important; }
+          /* padding-top handles spacing — removed sibling margin-top to avoid double */
 
           /* IRR section — its own page, never split */
           .irr-section {

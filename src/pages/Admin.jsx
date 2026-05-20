@@ -5712,7 +5712,7 @@ function ReportPage({ data, setData, totals }) {
           .report-cover {
             margin: 0 !important;
             padding: 26mm 22mm 22mm 22mm !important;
-            min-height: 297mm !important;
+            min-height: calc(297mm - 30mm) !important;
             box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
@@ -5768,7 +5768,11 @@ function ReportPage({ data, setData, totals }) {
           }
 
           /* Project blocks */
-          .project-block { break-inside: auto !important; page-break-inside: auto !important; }
+          .project-block {
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+            padding-top: 5mm !important;
+          }
           .project-block-header {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
@@ -5779,7 +5783,7 @@ function ReportPage({ data, setData, totals }) {
             max-height: 6.5cm !important;
             object-fit: cover;
           }
-          .project-block + .project-block { margin-top: 6mm !important; }
+          /* padding-top handles spacing — removed sibling margin-top to avoid double */
 
           /* IRR always new page */
           .irr-section {
