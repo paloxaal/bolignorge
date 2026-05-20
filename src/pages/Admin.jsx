@@ -1669,7 +1669,7 @@ function DashboardPage({ data, setData, totals }) {
             Prosjektstatus
           </h2>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: COL.border }}>
+        <div className="kpi-grid grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: COL.border }}>
           <KPICard
             label="Total porteføljeverdi"
             value={fmtMrd(totals.omsetningJustert)}
@@ -2313,7 +2313,7 @@ function CapitalSummary({ financials }) {
 
       {/* Stats row */}
       <div
-        className="grid grid-cols-2 md:grid-cols-5 gap-px"
+        className="kpi-grid grid grid-cols-2 md:grid-cols-5 gap-px"
         style={{ background: COL.border }}
       >
         <CapStat
@@ -2350,7 +2350,7 @@ function CapitalSummary({ financials }) {
         style={{ borderColor: COL.borderSoft }}
       >
         {/* Panel 1: Bars — annual flow */}
-        <div className="px-7 py-6">
+        <div className="chart-panel px-7 py-6">
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-3"
             style={{ color: COL.muted }}
@@ -2402,7 +2402,7 @@ function CapitalSummary({ financials }) {
 
         {/* Panel 2: Lines — cumulative stock */}
         <div
-          className="px-7 py-6 border-t"
+          className="chart-panel px-7 py-6 border-t"
           style={{ borderColor: COL.borderSoft }}
         >
           <div
@@ -5645,7 +5645,7 @@ function ReportPage({ data, setData, totals }) {
           .print-only { display: none !important; }
         }
         @media print {
-          /* DEFAULT PAGE — body content with footer */
+          /* Default page: A4 with margin + footer */
           @page {
             size: A4;
             margin: 14mm 12mm 16mm 12mm;
@@ -5665,9 +5665,8 @@ function ReportPage({ data, setData, totals }) {
               padding-bottom: 6mm;
             }
           }
-          /* COVERPAGE — full-bleed, no margins, no footer */
-          @page coverpage {
-            size: A4;
+          /* First page (cover): no margin, no footer — full bleed */
+          @page :first {
             margin: 0;
             @bottom-left  { content: ""; }
             @bottom-right { content: ""; }
@@ -5677,13 +5676,17 @@ function ReportPage({ data, setData, totals }) {
             background: #F6F1E7 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: auto !important;
+            max-width: 100% !important;
           }
           * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
 
-          /* Hide site chrome */
+          /* Hide chrome */
           .print\\:hidden,
           aside,
           body header:not([data-report="keep"]),
@@ -5693,21 +5696,24 @@ function ReportPage({ data, setData, totals }) {
           }
 
           /* Reset main padding */
-          main { padding: 0 !important; margin: 0 !important; }
+          main {
+            padding: 0 !important;
+            margin: 0 !important;
+            display: block !important;
+            width: auto !important;
+            max-width: 100% !important;
+          }
 
           /* Show / hide print-only elements */
           .screen-only { display: none !important; }
           .print-only { display: block !important; }
 
-          /* ---------- COVER & CLOSING ---------- */
-          .report-cover,
-          .report-closing {
-            page: coverpage !important;
-            box-sizing: border-box !important;
-            width: 210mm !important;
-            min-height: 297mm !important;
+          /* ============ COVER PAGE ============ */
+          .report-cover {
             margin: 0 !important;
             padding: 26mm 22mm 22mm 22mm !important;
+            min-height: calc(297mm - 30mm) !important;
+            box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: space-between !important;
@@ -5715,28 +5721,43 @@ function ReportPage({ data, setData, totals }) {
             color: #F6F1E7 !important;
             border: none !important;
             border-radius: 0 !important;
-          }
-          .report-cover {
             break-after: page !important;
             page-break-after: always !important;
           }
+          .report-cover h1 { font-size: 4.4rem !important; line-height: 1.02 !important; }
+
+          /* ============ CLOSING PAGE ============ */
           .report-closing {
             display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            margin: 0 !important;
+            padding: 22mm 20mm !important;
+            min-height: calc(297mm - 30mm) !important;
+            box-sizing: border-box !important;
+            background: #0E1A2B !important;
+            color: #F6F1E7 !important;
+            border: none !important;
+            border-radius: 0 !important;
             break-before: page !important;
             page-break-before: always !important;
           }
-          .report-cover h1 { font-size: 4.4rem !important; line-height: 1.02 !important; }
 
-          /* ---------- CONTENT FLOW ---------- */
+          /* ============ CONTENT FLOW ============ */
           .report-content {
             padding: 0 !important;
             margin: 0 !important;
             background: #F6F1E7 !important;
+            max-width: 100% !important;
           }
-          .report-content > * + * { margin-top: 9mm !important; }
+          .report-content > * + * { margin-top: 7mm !important; }
+          .report-content > section,
+          .report-content > div {
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+          }
 
-          /* Section breaks */
-          section { break-inside: auto; }
+          /* Section headers */
           h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
           p { orphans: 3; widows: 3; }
 
@@ -5747,18 +5768,39 @@ function ReportPage({ data, setData, totals }) {
           }
 
           /* Project blocks */
-          .project-block { break-inside: auto !important; page-break-inside: auto !important; }
+          .project-block {
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+            padding-top: 5mm !important;
+          }
           .project-block-header {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
             break-after: avoid !important;
             page-break-after: avoid !important;
           }
+          /* Keep the status paragraph from splitting mid-sentence */
+          .project-block p {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
           .project-block img {
-            max-height: 7.5cm !important;
+            max-height: 6.5cm !important;
             object-fit: cover;
           }
-          .project-block + .project-block { margin-top: 8mm !important; }
+          /* padding-top handles spacing — removed sibling margin-top to avoid double */
+
+          /* KPI grids stay together */
+          .kpi-grid {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          /* Chart panels stay together */
+          .chart-panel {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
 
           /* IRR always new page */
           .irr-section {
@@ -5767,13 +5809,9 @@ function ReportPage({ data, setData, totals }) {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
-          /* Capital summary stays together */
-          .capital-summary {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
+          /* capital-summary intentionally allowed to split across pages */
 
-          /* Chapter breaks */
+          /* Chapter break only for Selskapstall */
           .chapter-break {
             break-before: page !important;
             page-break-before: always !important;
@@ -5791,238 +5829,7 @@ function ReportPage({ data, setData, totals }) {
           img { max-width: 100% !important; }
 
           .report-screen-footer { display: none !important; }
-          /* Show closing card only in print, not on screen */
           .report-closing { display: flex !important; }
-
-          /* ---------- PRINT HARDENING V2 ----------
-             The browser PDF renderer is unforgiving: fixed widths, floats,
-             hidden overflow and no-wrap metadata rows are the main causes of
-             clipped text and large empty pages. These overrides make the
-             report content fluid while keeping only genuinely atomic elements
-             together. */
-          #root,
-          #root > div,
-          main,
-          .report-content,
-          .report-flow {
-            width: 100% !important;
-            max-width: none !important;
-            min-width: 0 !important;
-            height: auto !important;
-            min-height: 0 !important;
-            overflow: visible !important;
-          }
-          main,
-          .report-content,
-          .report-flow {
-            display: block !important;
-          }
-          .report-content,
-          .report-flow {
-            font-size: 10pt !important;
-            line-height: 1.45 !important;
-          }
-          .report-content > * + *,
-          .report-flow > * + * {
-            margin-top: 6mm !important;
-          }
-          section,
-          .market-section,
-          .portfolio-section,
-          .pipeline-section {
-            break-inside: auto !important;
-            page-break-inside: auto !important;
-            overflow: visible !important;
-          }
-          .chapter-break {
-            break-before: auto !important;
-            page-break-before: auto !important;
-          }
-          .keep-with-next,
-          h1,
-          h2,
-          h3,
-          h4 {
-            break-after: avoid !important;
-            page-break-after: avoid !important;
-          }
-          .avoid-break,
-          .report-kpi,
-          .project-block-header,
-          .project-image-wrap,
-          .market-visual,
-          .capital-summary {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-
-          /* KPI rows: force compact columns in print instead of Tailwind's
-             screen breakpoints, and allow long labels/subtitles to wrap. */
-          .kpi-grid,
-          .kpi-grid-3,
-          .kpi-grid-4 {
-            display: grid !important;
-            gap: 0 !important;
-            width: 100% !important;
-          }
-          .kpi-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
-          .kpi-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
-          .report-kpi {
-            min-width: 0 !important;
-            padding: 4.5mm 4mm !important;
-          }
-          .report-kpi-label,
-          .report-kpi-sub {
-            display: block !important;
-            max-width: 100% !important;
-            line-height: 1.25 !important;
-            letter-spacing: 0.12em !important;
-            white-space: normal !important;
-            overflow-wrap: anywhere !important;
-          }
-          .report-kpi-value {
-            display: block !important;
-            font-size: 22pt !important;
-            line-height: 1 !important;
-            white-space: nowrap !important;
-          }
-
-          /* Market section: no floats in print. Floats fragment poorly and were
-             responsible for text wrapping into clipped/narrow columns. */
-          .market-section {
-            padding: 6mm !important;
-          }
-          .market-layout {
-            overflow: visible !important;
-          }
-          .market-layout.has-image {
-            display: grid !important;
-            grid-template-columns: minmax(0, 1.05fr) minmax(58mm, 0.95fr) !important;
-            gap: 6mm !important;
-            align-items: start !important;
-          }
-          .market-text {
-            min-width: 0 !important;
-            font-size: 10pt !important;
-            line-height: 1.55 !important;
-            overflow-wrap: break-word !important;
-            hyphens: auto !important;
-          }
-          .market-visual {
-            float: none !important;
-            width: auto !important;
-            max-width: none !important;
-            min-width: 0 !important;
-            margin: 0 !important;
-          }
-          .market-visual img {
-            width: 100% !important;
-            max-height: 70mm !important;
-            object-fit: contain !important;
-          }
-
-          /* Project pages: compact media/fact layout, with facts wrapping
-             instead of being cut off at the right edge. */
-          .project-block {
-            break-inside: auto !important;
-            page-break-inside: auto !important;
-            padding-bottom: 5mm !important;
-            overflow: visible !important;
-          }
-          .project-block + .project-block {
-            margin-top: 5mm !important;
-          }
-          .project-media-grid.has-image {
-            display: grid !important;
-            grid-template-columns: minmax(50mm, 72mm) minmax(0, 1fr) !important;
-            gap: 5mm !important;
-            align-items: start !important;
-            margin-bottom: 4mm !important;
-          }
-          .project-media-grid.no-image {
-            display: block !important;
-            margin-bottom: 4mm !important;
-          }
-          .project-image-wrap {
-            overflow: hidden !important;
-          }
-          .project-image-wrap img,
-          .project-block img {
-            width: 100% !important;
-            height: 42mm !important;
-            max-height: 42mm !important;
-            object-fit: cover !important;
-          }
-          .project-facts {
-            min-width: 0 !important;
-            font-size: 8.5pt !important;
-          }
-          .fact-row {
-            display: grid !important;
-            grid-template-columns: 34mm minmax(0, 1fr) !important;
-            gap: 2mm !important;
-            align-items: start !important;
-            padding: 1.15mm 0 !important;
-          }
-          .fact-label {
-            min-width: 0 !important;
-            font-size: 7.3pt !important;
-            line-height: 1.2 !important;
-            letter-spacing: 0.11em !important;
-            white-space: normal !important;
-            overflow-wrap: anywhere !important;
-          }
-          .fact-value {
-            min-width: 0 !important;
-            max-width: 100% !important;
-            text-align: right !important;
-            font-size: 8pt !important;
-            line-height: 1.25 !important;
-            white-space: normal !important;
-            overflow-wrap: anywhere !important;
-          }
-          .project-status-label {
-            margin-bottom: 1mm !important;
-            font-size: 7.5pt !important;
-          }
-          .project-status-copy {
-            max-width: none !important;
-            font-size: 9.2pt !important;
-            line-height: 1.45 !important;
-            overflow-wrap: break-word !important;
-            hyphens: auto !important;
-            orphans: 3;
-            widows: 3;
-          }
-
-          /* Tables may span pages, but rows/header should not break. This avoids
-             the blank pages caused by keeping an entire large table together. */
-          table {
-            width: 100% !important;
-            table-layout: fixed !important;
-            break-inside: auto !important;
-            page-break-inside: auto !important;
-            font-size: 8.5pt !important;
-          }
-          thead { display: table-header-group !important; }
-          tfoot { display: table-footer-group !important; }
-          tr {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-          th,
-          td {
-            padding: 1.8mm 1.5mm !important;
-            vertical-align: top !important;
-            white-space: normal !important;
-            overflow-wrap: anywhere !important;
-          }
-          .recharts-responsive-container,
-          .recharts-wrapper,
-          svg.recharts-surface {
-            min-height: 60mm !important;
-            overflow: visible !important;
-          }
         }
       `}</style>
 
@@ -6277,7 +6084,7 @@ function ReportPage({ data, setData, totals }) {
           {/* Nøkkeltall */}
           <section>
             <SectionHeader num="01" title="Nøkkeltall" />
-            <div className="kpi-grid kpi-grid-4 grid grid-cols-2 md:grid-cols-4 gap-px mt-6" style={{ background: COL.border }}>
+            <div className="kpi-grid grid grid-cols-2 md:grid-cols-4 gap-px mt-6" style={{ background: COL.border }}>
               <ReportKPI
                 label="Total porteføljeverdi"
                 value={fmtMrd(totals.omsetningJustert)}
@@ -6300,17 +6107,17 @@ function ReportPage({ data, setData, totals }) {
           </section>
 
           {/* Marked & outlook */}
-          <section className="market-section">
+          <section>
             <SectionHeader num="02" title="Marked & outlook" />
-            <div className={`market-layout ${data.market.imageUrl ? "has-image" : ""} mt-4 space-y-6`}>
+            <div className="mt-4 space-y-6">
               <div
-                className="market-text text-[14px] leading-[1.7] whitespace-pre-line"
+                className="text-[14px] leading-[1.7] whitespace-pre-line"
                 style={{ color: COL.inkSoft }}
               >
                 {data.market.outlook}
               </div>
               {data.market.imageUrl && (
-                <div className="market-visual">
+                <div>
                   <img
                     src={data.market.imageUrl}
                     alt={data.market.imageCaption || "Markedsstatistikk"}
@@ -6338,9 +6145,7 @@ function ReportPage({ data, setData, totals }) {
           </section>
 
           {/* Prosjekt for prosjekt */}
-          <div className="chapter-break">
-            <ProjectByProjectSection data={data} num="03" />
-          </div>
+          <ProjectByProjectSection data={data} num="03" />
 
           {/* Portefølje */}
           <section>
@@ -6506,7 +6311,7 @@ function ReportPage({ data, setData, totals }) {
           {/* Verdijustert egenkapital */}
           <section>
             <SectionHeader num="06" title="Verdijustert egenkapital" />
-            <div className="kpi-grid kpi-grid-3 mt-4 grid grid-cols-2 md:grid-cols-3 gap-px" style={{ background: COL.border }}>
+            <div className="kpi-grid mt-4 grid grid-cols-2 md:grid-cols-3 gap-px" style={{ background: COL.border }}>
               <ReportKPI label="Bokført EK" value={fmtNOK(totals.bokfortEK) + " m"} />
               <ReportKPI label="Merverdier eiendom" value={fmtNOK(totals.merverdier) + " m"} />
               <ReportKPI label="NAV" value={fmtNOK(totals.nav) + " m"} />
@@ -6776,12 +6581,12 @@ function ProjectByProjectSection({ data, num }) {
                 <div
                   className={
                     p.imageUrl
-                      ? "project-media-grid has-image grid grid-cols-1 md:grid-cols-2 gap-6 mb-5"
-                      : "project-media-grid no-image mb-5"
+                      ? "grid grid-cols-1 md:grid-cols-2 gap-6 mb-5"
+                      : "mb-5"
                   }
                 >
                   {p.imageUrl && (
-                    <div className="project-image-wrap overflow-hidden">
+                    <div className="overflow-hidden">
                       <img
                         src={p.imageUrl}
                         alt={p.name}
@@ -6794,7 +6599,7 @@ function ProjectByProjectSection({ data, num }) {
                       />
                     </div>
                   )}
-                  <div className="project-facts text-xs">
+                  <div className="text-xs">
                     <FactRow
                       label="Antall boliger"
                       value={total > 0 ? total : "—"}
@@ -6851,15 +6656,15 @@ function ProjectByProjectSection({ data, num }) {
               </div>
 
               {/* Status — full width below */}
-              <div className="project-status">
+              <div>
                 <div
-                  className="project-status-label text-[9.5px] tracking-[0.22em] uppercase mb-2"
+                  className="text-[9.5px] tracking-[0.22em] uppercase mb-2"
                   style={{ color: COL.gold, fontFamily: "'JetBrains Mono', monospace" }}
                 >
                   Status
                 </div>
                 <p
-                  className="project-status-copy text-[14px] leading-[1.7] whitespace-pre-line"
+                  className="text-[14px] leading-[1.7] whitespace-pre-line"
                   style={{ color: COL.inkSoft, maxWidth: "85ch" }}
                 >
                   {p.statusLong || (
@@ -6903,15 +6708,15 @@ function SectionHeader({ num, title }) {
 }
 function ReportKPI({ label, value, sub }) {
   return (
-    <div className="report-kpi px-6 py-6" style={{ background: COL.paper }}>
+    <div className="px-6 py-6" style={{ background: COL.paper }}>
       <div
-        className="report-kpi-label text-[9.5px] tracking-[0.22em] uppercase mb-3"
+        className="text-[9.5px] tracking-[0.22em] uppercase mb-3"
         style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
       >
         {label}
       </div>
       <div
-        className="report-kpi-value text-[30px] leading-none"
+        className="text-[30px] leading-none"
         style={{
           fontFamily: "'Playfair Display', serif",
           fontWeight: 500,
@@ -6923,7 +6728,7 @@ function ReportKPI({ label, value, sub }) {
       </div>
       {sub && (
         <div
-          className="report-kpi-sub mt-2.5 text-[9.5px] tracking-[0.18em] uppercase"
+          className="mt-2.5 text-[9.5px] tracking-[0.18em] uppercase"
           style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
         >
           {sub}
@@ -6935,30 +6740,20 @@ function ReportKPI({ label, value, sub }) {
 function FactRow({ label, value }) {
   return (
     <div
-      className="fact-row flex justify-between items-baseline gap-4"
+      className="flex justify-between items-baseline gap-4"
       style={{ borderBottom: `1px dotted ${COL.borderSoft}`, padding: "5px 0" }}
     >
       <span
-        className="fact-label text-[9.5px] tracking-[0.14em] uppercase"
-        style={{
-          color: COL.muted,
-          fontFamily: "'JetBrains Mono', monospace",
-          minWidth: 0,
-          overflowWrap: "anywhere",
-        }}
+        className="text-[9.5px] tracking-[0.14em] uppercase"
+        style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
       >
         {label}
       </span>
       <span
-        className="fact-value"
         style={{
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: 12,
           color: COL.ink,
-          minWidth: 0,
-          textAlign: "right",
-          whiteSpace: "normal",
-          overflowWrap: "anywhere",
         }}
       >
         {value}
