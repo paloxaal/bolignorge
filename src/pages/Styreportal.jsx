@@ -870,16 +870,31 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
 
   const totals = computeTotals(data);
 
-  const NAV = [
-    { id: "dashboard", label: "Oversikt", icon: LayoutDashboard },
-    { id: "portfolio", label: "Portefølje", icon: Building2 },
-    { id: "pipeline", label: "Pipeline", icon: Target },
-    { id: "financials", label: "Selskapstall", icon: TrendingUp },
-    // Arkiv krever autentisert lesetilgang — skjules i share-modus
-    ...(mode === "share"
-      ? []
-      : [{ id: "archive", label: "Arkiv", icon: Archive }]),
-  ];
+  // Rapport-omfang: en delingslenke kan være begrenset til ett enkelt prosjekt
+  // (relevant for medaksjonærer i prosjektselskapet). Da viser portalen kun
+  // den fokuserte prosjektrapporten og skjuler selskaps-/porteføljefanene, så
+  // mottakeren ikke ser resten av porteføljen.
+  const scopeProject =
+    data?.reportScope?.type === "project"
+      ? (data.projects || []).find(
+          (p) => p.id === data.reportScope.projectId
+        ) ||
+        (data.projects || [])[0] ||
+        null
+      : null;
+
+  const NAV = scopeProject
+    ? [{ id: "dashboard", label: "Prosjektrapport", icon: FileText }]
+    : [
+        { id: "dashboard", label: "Oversikt", icon: LayoutDashboard },
+        { id: "portfolio", label: "Portefølje", icon: Building2 },
+        { id: "pipeline", label: "Pipeline", icon: Target },
+        { id: "financials", label: "Selskapstall", icon: TrendingUp },
+        // Arkiv krever autentisert lesetilgang — skjules i share-modus
+        ...(mode === "share"
+          ? []
+          : [{ id: "archive", label: "Arkiv", icon: Archive }]),
+      ];
 
   return (
     <div
@@ -1485,9 +1500,12 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           </header>
         )}
         <div className="px-4 py-6 md:px-10 md:py-8">
-          {page === "dashboard" && (
-            <DashboardPage data={data} totals={totals} />
-          )}
+          {page === "dashboard" &&
+            (scopeProject ? (
+              <SingleProjectReport project={scopeProject} data={data} />
+            ) : (
+              <DashboardPage data={data} totals={totals} />
+            ))}
           {page === "portfolio" && (
             <PortfolioPage data={data} onView={setViewingProject} />
           )}
@@ -1502,8 +1520,10 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           )}
         </div>
 
-        {/* Closing — print-only proper signoff */}
-        {page === "dashboard" && (
+        {/* Closing — print-only proper signoff.
+            I prosjekt-omfang har SingleProjectReport sin egen closing, så denne
+            selskaps-closingen skjules for å unngå dobbel signoff. */}
+        {page === "dashboard" && !scopeProject && (
           <div
             data-report="keep"
             className="report-closing"
@@ -2029,6 +2049,311 @@ function DashboardPage({ data, totals }) {
         <CapitalSummary financials={data.financials || []} />
         <IRRSection financials={data.financials} totals={totals} />
       </section>
+    </div>
+  );
+}
+
+// ---------------- SINGLE-PROJECT REPORT ----------------
+// Fokusert rapport for ett enkelt prosjekt — egnet for deling med
+// medaksjonærer i prosjektselskapet. Egen cover, oversikt, økonomi (brutto +
+// justert for Bolig Norges eierandel), status-narrativ og closing. Bruker
+// samme print-klasser (.cover-hero / .report-flow / .report-closing) som
+// selskapsrapporten, så PDF-paginering oppfører seg likt.
+function SingleProjectReport({ project: p, data }) {
+  if (!p) return null;
+  const meta = data?.meta || {};
+  const sold = Number(p.unitsSold) || 0;
+  const total = Number(p.units) || 0;
+  const pct = total > 0 ? Math.round((sold / total) * 100) : 0;
+  const partnerShare = Number(p.partnerShare);
+  const bnShare = isNaN(partnerShare) ? 1 : (100 - partnerShare) / 100;
+  const bnPct = Math.round(bnShare * 100);
+  const omsetning = Number(p.omsetning) || 0;
+  const db = Number(p.db) || 0;
+  const margin = omsetning > 0 ? (db / omsetning) * 100 : 0;
+
+  return (
+    <div className="report-flow space-y-10">
+      {/* Cover hero — full A4-side i print, hero-band på skjerm */}
+      <div
+        data-report="keep"
+        className="cover-hero -mx-4 -mt-6 px-6 py-10 md:-mx-10 md:-mt-8 md:px-16 md:py-16 flex flex-col justify-between"
+        style={{ background: COL.ink, color: COL.paper, minHeight: 360 }}
+      >
+        <div className="flex justify-between items-start gap-4">
+          <div
+            className="text-[10px] tracking-[0.28em] uppercase"
+            style={{ opacity: 0.5 }}
+          >
+            Konfidensielt — prosjektrapport
+          </div>
+          <div className="flex-shrink-0">
+            <BNLogo light height={28} className="md:h-9" />
+          </div>
+        </div>
+
+        <div className="mt-10 md:mt-20">
+          <div
+            className="mb-5"
+            style={{ width: 56, height: 1.5, background: COL.goldSoft, opacity: 0.85 }}
+          />
+          <div
+            className="text-[11px] tracking-[0.36em] uppercase mb-4"
+            style={{ opacity: 0.72, color: COL.goldSoft }}
+          >
+            Prosjektrapport
+          </div>
+          <h1
+            className="text-5xl md:text-7xl mb-3"
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 400,
+              letterSpacing: "-0.025em",
+              lineHeight: 1.02,
+            }}
+          >
+            {p.name}
+          </h1>
+          <div
+            className="cover-meta text-xl md:text-3xl"
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 300,
+              opacity: 0.82,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {p.location ? `${p.location} · ` : ""}
+            {meta.companyName} · {meta.reportYear}
+          </div>
+        </div>
+
+        <div
+          className="hidden print:flex justify-between items-end gap-3 text-[10px] tracking-[0.22em] uppercase"
+          style={{ opacity: 0.45, fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          <span>
+            Generert ·{" "}
+            {new Date().toLocaleDateString("nb-NO", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </span>
+          <span>Aksjonærmateriale</span>
+        </div>
+      </div>
+
+      {/* §01 — Oversikt */}
+      <section>
+        <SectionHeader num="01" title="Oversikt" />
+        <div
+          className={
+            p.imageUrl ? "mt-6 grid grid-cols-1 md:grid-cols-2 gap-6" : "mt-6"
+          }
+        >
+          {p.imageUrl && (
+            <div className="overflow-hidden">
+              <img
+                src={p.imageUrl}
+                alt={p.name}
+                className="w-full h-auto"
+                style={{ display: "block", aspectRatio: "16 / 10", objectFit: "cover" }}
+              />
+            </div>
+          )}
+          <div className="text-xs">
+            <FactRow label="Lokasjon" value={p.location || "—"} />
+            <FactRow label="Antall boliger" value={total > 0 ? total : "—"} />
+            {sold > 0 && total > 0 && (
+              <FactRow label="Solgt" value={`${sold} (${pct} %)`} />
+            )}
+            {sold > 0 && total > 0 && (
+              <FactRow label="Ledig" value={Math.max(0, total - sold)} />
+            )}
+            {p.kvm > 0 && <FactRow label="BRA-S" value={fmtNOK(p.kvm) + " kvm"} />}
+            {p.byggestart && (
+              <FactRow
+                label="Byggeperiode"
+                value={`${p.byggestart}–${p.byggeslutt || "?"}`}
+              />
+            )}
+            <FactRow label="Status" value={p.statusShort || "—"} />
+            {p.partner && (
+              <FactRow
+                label="Partner"
+                value={(p.partnerShare ? p.partnerShare + "% " : "") + p.partner}
+              />
+            )}
+            {p.website && (
+              <a
+                href={p.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block mt-3 text-[11px] tracking-[0.06em]"
+                style={{ color: COL.gold, fontFamily: "'JetBrains Mono', monospace" }}
+              >
+                {p.website.replace(/^https?:\/\//, "")} ↗
+              </a>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* §02 — Økonomi */}
+      <section>
+        <SectionHeader num="02" title="Økonomi" />
+        <div
+          className="kpi-grid mt-6 grid grid-cols-2 md:grid-cols-4 gap-px"
+          style={{ background: COL.border }}
+        >
+          <KPICard
+            label="Omsetning (prosjekt)"
+            value={omsetning > 0 ? fmtMrd(omsetning) : "—"}
+            accent
+          />
+          <KPICard
+            label="Dekningsbidrag"
+            value={db > 0 ? fmtMrd(db) : "—"}
+          />
+          <KPICard label="DB-margin" value={margin > 0 ? fmtPct(margin) : "—"} />
+          <KPICard
+            label="Bolig Norge eierandel"
+            value={bnPct + " %"}
+            sub={p.partner ? `Partner: ${p.partner}` : "Heleid"}
+          />
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 text-xs">
+          <div>
+            <FactRow
+              label="Omsetning · BN-andel"
+              value={omsetning > 0 ? fmtMrd(omsetning * bnShare) : "—"}
+            />
+            <FactRow
+              label="Dekningsbidrag · BN-andel"
+              value={db > 0 ? fmtMrd(db * bnShare) : "—"}
+            />
+          </div>
+          <div>
+            {p.merverdiTomt > 0 && (
+              <FactRow label="Merverdi tomt" value={fmtMrd(p.merverdiTomt)} />
+            )}
+            {p.tomtekost > 0 && (
+              <FactRow label="Tomtekost" value={fmtMrd(p.tomtekost)} />
+            )}
+            {p.bank && <FactRow label="Bank" value={p.bank} />}
+          </div>
+        </div>
+        <div
+          className="mt-3 text-[10px] tracking-[0.2em] uppercase"
+          style={{ color: COL.muted }}
+        >
+          Tall vist brutto for prosjektet og justert for Bolig Norges eierandel
+          ({bnPct} %)
+        </div>
+      </section>
+
+      {/* §03 — Status */}
+      <section>
+        <SectionHeader num="03" title="Status" />
+        <div className="project-status mt-5">
+          <p
+            className="text-[15px] leading-[1.7] whitespace-pre-line"
+            style={{ color: COL.inkSoft, maxWidth: "80ch" }}
+          >
+            {p.statusLong || (
+              <em style={{ color: COL.muted }}>Ingen statustekst.</em>
+            )}
+          </p>
+        </div>
+      </section>
+
+      {/* Closing — print-only signoff for prosjektrapporten */}
+      <div
+        data-report="keep"
+        className="report-closing"
+        style={{ display: "none", background: COL.ink, color: COL.paper }}
+      >
+        <div
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.28em",
+              textTransform: "uppercase",
+              opacity: 0.5,
+            }}
+          >
+            Rapport slutt
+          </div>
+          <BNLogo light height={32} />
+        </div>
+
+        <div style={{ margin: "3rem 0" }}>
+          <div
+            style={{
+              width: 56,
+              height: 1.5,
+              background: COL.goldSoft,
+              opacity: 0.85,
+              marginBottom: "1.25rem",
+            }}
+          />
+          <div
+            style={{
+              fontSize: 11,
+              letterSpacing: "0.36em",
+              textTransform: "uppercase",
+              opacity: 0.72,
+              color: COL.goldSoft,
+              marginBottom: "1rem",
+            }}
+          >
+            Prosjektrapport · {p.name}
+          </div>
+          <div
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontSize: "2.5rem",
+              fontWeight: 400,
+              letterSpacing: "-0.02em",
+              marginBottom: "1rem",
+            }}
+          >
+            {meta.companyName}
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.75, opacity: 0.72, maxWidth: "28rem" }}>
+            Denne prosjektrapporten er konfidensiell og rettet mot aksjonærer i
+            prosjektselskapet. Den skal ikke videreformidles uten skriftlig
+            samtykke. Tall og prognoser er basert på interne registreringer på
+            rapport-tidspunkt og kan endre seg.
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-end",
+            fontSize: 10,
+            letterSpacing: "0.22em",
+            textTransform: "uppercase",
+            opacity: 0.45,
+            fontFamily: "'JetBrains Mono', monospace",
+          }}
+        >
+          <span>
+            Generert ·{" "}
+            {new Date().toLocaleDateString("nb-NO", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </span>
+          <span>Aksjonærmateriale</span>
+        </div>
+      </div>
     </div>
   );
 }

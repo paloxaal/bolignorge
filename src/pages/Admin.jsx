@@ -5497,6 +5497,13 @@ function ReportPage({ data, setData, totals }) {
   const [shareLink, setShareLink] = useState(null);
   const [shareError, setShareError] = useState(null);
   const [shareCopied, setShareCopied] = useState(false);
+  // Rapport-omfang: "company" (hele selskapet) eller en prosjekt-id. Styrer
+  // både forhåndsvisning/PDF og hva delingslenken inneholder.
+  const [reportScope, setReportScope] = useState("company");
+  const scopedProject =
+    reportScope === "company"
+      ? null
+      : (data.projects || []).find((p) => p.id === reportScope) || null;
   // Lokalt input state — vil propageres til data.meta ved onBlur
   const [reportLabel, setReportLabel] = useState(
     `${data.meta?.reportPeriod || ""} ${data.meta?.reportYear || ""}`.trim()
@@ -5508,6 +5515,16 @@ function ReportPage({ data, setData, totals }) {
       `${data.meta?.reportPeriod || ""} ${data.meta?.reportYear || ""}`.trim()
     );
   }, [data.meta?.reportPeriod, data.meta?.reportYear]);
+
+  // Faller tilbake til hele selskapet hvis valgt prosjekt forsvinner (slettet)
+  useEffect(() => {
+    if (
+      reportScope !== "company" &&
+      !(data.projects || []).some((p) => p.id === reportScope)
+    ) {
+      setReportScope("company");
+    }
+  }, [data.projects, reportScope]);
 
   // Skriv tilbake til data.meta — parser "Periode År" til reportPeriod + reportYear
   const commitReportLabel = () => {
@@ -5598,6 +5615,28 @@ function ReportPage({ data, setData, totals }) {
         throw new Error(`Kunne ikke lagre data før lenke: ${flushResult?.error || "ukjent feil"}`);
       }
 
+      // Bygg snapshot for delingslenken. Live-dashbordet flushes alltid komplett
+      // (over), men ved enkeltprosjekt-omfang slankes selve delings-kopien til
+      // kun det prosjektet (+ omfangsmarkør). Da ser medaksjonærer kun «sitt»
+      // prosjekt — resten av porteføljen og selskaps-/pipeline-tall utelates.
+      let shareSnapshot = snapshotData;
+      if (reportScope !== "company") {
+        const proj = (snapshotData.projects || []).find(
+          (p) => p.id === reportScope
+        );
+        shareSnapshot = {
+          ...snapshotData,
+          projects: proj ? [proj] : [],
+          pipeline: [],
+          financials: [],
+          reportScope: {
+            type: "project",
+            projectId: reportScope,
+            projectName: proj?.name || "",
+          },
+        };
+      }
+
       // 24 bytes = 192 bits entropi → ~32 base64url-tegn
       const bytes = new Uint8Array(24);
       window.crypto.getRandomValues(bytes);
@@ -5610,9 +5649,12 @@ function ReportPage({ data, setData, totals }) {
 
       const { error } = await supabase.from("share_tokens").insert({
         token,
-        snapshot: snapshotData,
+        snapshot: shareSnapshot,
         expires_at: expiresAt.toISOString(),
-        report_label: reportLabel || null,
+        report_label:
+          shareSnapshot.reportScope?.projectName
+            ? `${shareSnapshot.reportScope.projectName} · ${reportLabel}`.trim()
+            : reportLabel || null,
       });
       if (error) throw error;
 
@@ -5929,11 +5971,44 @@ function ReportPage({ data, setData, totals }) {
 
       {/* Toolbar */}
       <div
-        className="flex items-center justify-between px-4 py-3 border print:hidden"
+        className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border print:hidden"
         style={{ borderColor: COL.border, background: COL.card }}
       >
-        <div className="text-xs" style={{ color: COL.muted }}>
-          Forhåndsvisning av månedsrapport — klar for utskrift / PDF.
+        {/* Omfang-velger: hele selskapet eller ett enkelt prosjekt. Styrer
+            både forhåndsvisning/PDF (under) og delingslenken. */}
+        <div className="flex items-center gap-2">
+          <label
+            className="text-[10px] tracking-[0.18em] uppercase whitespace-nowrap"
+            style={{ color: COL.muted }}
+          >
+            Omfang
+          </label>
+          <select
+            value={reportScope}
+            onChange={(e) => setReportScope(e.target.value)}
+            className="p-1.5 text-[12px] border"
+            style={{
+              background: COL.paper,
+              borderColor: COL.border,
+              color: COL.inkSoft,
+            }}
+            title="Velg om rapporten skal dekke hele selskapet eller bare ett prosjekt"
+          >
+            <option value="company">Hele selskapet</option>
+            {(data.projects || []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <span
+            className="text-[11px] hidden md:inline"
+            style={{ color: COL.muted }}
+          >
+            {scopedProject
+              ? `Prosjektrapport — kun «${scopedProject.name}»`
+              : "Full månedsrapport — klar for utskrift / PDF"}
+          </span>
         </div>
         <div className="flex gap-2">
           <button
@@ -6000,6 +6075,24 @@ function ReportPage({ data, setData, totals }) {
             {shareGenerating ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />}
             {shareGenerating ? "Genererer …" : "Generer lenke"}
           </button>
+        </div>
+
+        {/* Omfangs-kontekst — speiler valget i verktøylinjen øverst */}
+        <div
+          className="flex items-start gap-2 mb-3 px-3 py-2 text-[12px]"
+          style={{ background: COL.paper, border: `1px solid ${COL.border}` }}
+        >
+          <span
+            className="text-[9.5px] tracking-[0.18em] uppercase mt-0.5 whitespace-nowrap"
+            style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            Omfang
+          </span>
+          <span style={{ color: COL.inkSoft, lineHeight: 1.5 }}>
+            {scopedProject
+              ? `Lenken deler kun prosjektet «${scopedProject.name}» — egnet for medaksjonærer i prosjektselskapet. Resten av porteføljen og selskapstall utelates fra kopien.`
+              : "Lenken deler hele selskapsrapporten. Bytt omfang i verktøylinjen øverst for å dele ett enkelt prosjekt."}
+          </span>
         </div>
 
         <div className="flex items-center gap-3 mb-3">
@@ -6095,6 +6188,10 @@ function ReportPage({ data, setData, totals }) {
         className="shadow-sm"
         style={{ background: COL.paper, border: `1px solid ${COL.border}` }}
       >
+        {scopedProject ? (
+          <SingleProjectReport project={scopedProject} data={data} />
+        ) : (
+        <>
         {/* Cover */}
         <div
           className="report-cover px-16 py-20 flex flex-col justify-between"
@@ -6610,6 +6707,8 @@ function ReportPage({ data, setData, totals }) {
             Månedsrapport {data.meta.reportPeriod}
           </span>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
@@ -6853,6 +6952,288 @@ function FactRow({ label, value }) {
         {value}
       </span>
     </div>
+  );
+}
+
+// ---------------- SINGLE-PROJECT REPORT (gjenbrukbar) ----------------
+// Fokusert rapport for ett enkelt prosjekt — egen cover, oversikt, økonomi
+// (brutto + justert for Bolig Norges eierandel), status og closing. Egnet for
+// deling med medaksjonærer i prosjektselskapet. Bruker samme print-klasser
+// (.report-cover / .report-content / .report-closing) som selskapsrapporten.
+function SingleProjectReport({ project: p, data }) {
+  if (!p) return null;
+  const meta = data?.meta || {};
+  const sold = Number(p.unitsSold) || 0;
+  const total = Number(p.units) || 0;
+  const pct = total > 0 ? Math.round((sold / total) * 100) : 0;
+  const partnerShare = Number(p.partnerShare);
+  const bnShare = isNaN(partnerShare) ? 1 : (100 - partnerShare) / 100;
+  const bnPct = Math.round(bnShare * 100);
+  const omsetning = Number(p.omsetning) || 0;
+  const db = Number(p.db) || 0;
+  const margin = omsetning > 0 ? (db / omsetning) * 100 : 0;
+
+  return (
+    <>
+      {/* Cover */}
+      <div
+        className="report-cover px-16 py-20 flex flex-col justify-between"
+        style={{ background: COL.ink, color: COL.paper, minHeight: "420px" }}
+      >
+        <div className="flex justify-between items-start">
+          <div
+            className="text-[10px] tracking-[0.28em] uppercase"
+            style={{ opacity: 0.5 }}
+          >
+            Konfidensielt — prosjektrapport
+          </div>
+          <BNLogo light height={36} />
+        </div>
+
+        <div className="mt-12">
+          <div
+            className="mb-5"
+            style={{ width: 56, height: 1.5, background: COL.goldSoft, opacity: 0.85 }}
+          />
+          <div
+            className="text-[11px] tracking-[0.36em] uppercase mb-4"
+            style={{ opacity: 0.72, color: COL.goldSoft }}
+          >
+            Prosjektrapport
+          </div>
+          <h1
+            className="text-7xl mb-3"
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 400,
+              letterSpacing: "-0.025em",
+              lineHeight: 1.02,
+            }}
+          >
+            {p.name}
+          </h1>
+          <div
+            className="text-3xl"
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 300,
+              opacity: 0.82,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {p.location ? `${p.location} · ` : ""}
+            {meta.companyName} · {meta.reportYear}
+          </div>
+        </div>
+
+        <div
+          className="hidden print:flex justify-between items-end text-[10px] tracking-[0.22em] uppercase"
+          style={{ opacity: 0.45, fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          <span>
+            Generert ·{" "}
+            {new Date().toLocaleDateString("nb-NO", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </span>
+          <span>Aksjonærmateriale</span>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="report-content px-16 py-12 space-y-12">
+        {/* Oversikt */}
+        <section>
+          <SectionHeader num="01" title="Oversikt" />
+          <div
+            className={
+              p.imageUrl ? "mt-6 grid grid-cols-1 md:grid-cols-2 gap-6" : "mt-6"
+            }
+          >
+            {p.imageUrl && (
+              <div className="overflow-hidden">
+                <img
+                  src={p.imageUrl}
+                  alt={p.name}
+                  className="w-full h-auto"
+                  style={{ display: "block", aspectRatio: "16 / 10", objectFit: "cover" }}
+                />
+              </div>
+            )}
+            <div className="text-xs">
+              <FactRow label="Lokasjon" value={p.location || "—"} />
+              <FactRow label="Antall boliger" value={total > 0 ? total : "—"} />
+              {sold > 0 && total > 0 && (
+                <FactRow label="Solgt" value={`${sold} (${pct} %)`} />
+              )}
+              {sold > 0 && total > 0 && (
+                <FactRow label="Ledig" value={Math.max(0, total - sold)} />
+              )}
+              {p.kvm > 0 && <FactRow label="BRA-S" value={fmtNOK(p.kvm) + " kvm"} />}
+              {p.byggestart && (
+                <FactRow
+                  label="Byggeperiode"
+                  value={`${p.byggestart}–${p.byggeslutt || "?"}`}
+                />
+              )}
+              <FactRow label="Status" value={p.statusShort || "—"} />
+              {p.partner && (
+                <FactRow
+                  label="Partner"
+                  value={(p.partnerShare ? p.partnerShare + "% " : "") + p.partner}
+                />
+              )}
+              {p.website && (
+                <a
+                  href={p.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block mt-3 text-[11px] tracking-[0.06em]"
+                  style={{ color: COL.gold, fontFamily: "'JetBrains Mono', monospace" }}
+                >
+                  {p.website.replace(/^https?:\/\//, "")} ↗
+                </a>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Økonomi */}
+        <section>
+          <SectionHeader num="02" title="Økonomi" />
+          <div
+            className="kpi-grid grid grid-cols-2 md:grid-cols-4 gap-px mt-6"
+            style={{ background: COL.border }}
+          >
+            <ReportKPI
+              label="Omsetning (prosjekt)"
+              value={omsetning > 0 ? fmtMrd(omsetning) : "—"}
+            />
+            <ReportKPI label="Dekningsbidrag" value={db > 0 ? fmtMrd(db) : "—"} />
+            <ReportKPI label="DB-margin" value={margin > 0 ? fmtPct(margin) : "—"} />
+            <ReportKPI
+              label="Bolig Norge eierandel"
+              value={bnPct + " %"}
+              sub={p.partner ? `Partner: ${p.partner}` : "Heleid"}
+            />
+          </div>
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 text-xs">
+            <div>
+              <FactRow
+                label="Omsetning · BN-andel"
+                value={omsetning > 0 ? fmtMrd(omsetning * bnShare) : "—"}
+              />
+              <FactRow
+                label="Dekningsbidrag · BN-andel"
+                value={db > 0 ? fmtMrd(db * bnShare) : "—"}
+              />
+            </div>
+            <div>
+              {p.merverdiTomt > 0 && (
+                <FactRow label="Merverdi tomt" value={fmtMrd(p.merverdiTomt)} />
+              )}
+              {p.tomtekost > 0 && (
+                <FactRow label="Tomtekost" value={fmtMrd(p.tomtekost)} />
+              )}
+              {p.bank && <FactRow label="Bank" value={p.bank} />}
+            </div>
+          </div>
+          <div
+            className="mt-3 text-[10px] tracking-[0.15em] uppercase"
+            style={{ color: COL.muted }}
+          >
+            Tall vist brutto for prosjektet og justert for Bolig Norges eierandel
+            ({bnPct} %)
+          </div>
+        </section>
+
+        {/* Status */}
+        <section>
+          <SectionHeader num="03" title="Status" />
+          <p
+            className="mt-4 text-[14px] leading-[1.7] whitespace-pre-line"
+            style={{ color: COL.inkSoft, maxWidth: "80ch" }}
+          >
+            {p.statusLong || (
+              <em style={{ color: COL.muted }}>Ingen statustekst.</em>
+            )}
+          </p>
+        </section>
+      </div>
+
+      {/* Closing — print-only signoff */}
+      <div
+        className="report-closing px-16 py-20 flex flex-col justify-between"
+        style={{ background: COL.ink, color: COL.paper, display: "none" }}
+      >
+        <div className="flex justify-between items-start">
+          <div
+            className="text-[10px] tracking-[0.28em] uppercase"
+            style={{ opacity: 0.5 }}
+          >
+            Rapport slutt
+          </div>
+          <BNLogo light height={32} />
+        </div>
+
+        <div className="my-12">
+          <div
+            className="mb-5"
+            style={{ width: 56, height: 1.5, background: COL.goldSoft, opacity: 0.85 }}
+          />
+          <div
+            className="text-[11px] tracking-[0.36em] uppercase mb-4"
+            style={{ opacity: 0.72, color: COL.goldSoft }}
+          >
+            Prosjektrapport · {p.name}
+          </div>
+          <div
+            className="text-4xl mb-4"
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 400,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            {meta.companyName}
+          </div>
+          <div className="text-[13px] leading-[1.75] max-w-md" style={{ opacity: 0.72 }}>
+            Denne prosjektrapporten er konfidensiell og rettet mot aksjonærer i
+            prosjektselskapet. Den skal ikke videreformidles uten skriftlig
+            samtykke. Tall og prognoser er basert på interne registreringer på
+            rapport-tidspunkt og kan endre seg.
+          </div>
+        </div>
+
+        <div
+          className="flex justify-between items-end text-[10px] tracking-[0.22em] uppercase"
+          style={{ opacity: 0.45, fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          <span>
+            Generert ·{" "}
+            {new Date().toLocaleDateString("nb-NO", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </span>
+          <span>Aksjonærmateriale</span>
+        </div>
+      </div>
+
+      {/* Screen-only footer (hidden in print) */}
+      <div
+        className="report-screen-footer px-16 py-5 border-t flex justify-between items-center"
+        style={{ borderColor: COL.border, color: COL.muted, fontSize: 11 }}
+      >
+        <span>Konfidensielt — prosjektrapport for aksjonærer</span>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+          {p.name}
+        </span>
+      </div>
+    </>
   );
 }
 
