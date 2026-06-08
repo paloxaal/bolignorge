@@ -5992,14 +5992,16 @@ function ReportPage({ data, setData, totals }) {
               borderColor: COL.border,
               color: COL.inkSoft,
             }}
-            title="Velg om rapporten skal dekke hele selskapet eller bare ett prosjekt"
+            title="Velg om rapporten skal dekke hele selskapet eller bare ett prosjekt (for utsendelse til medaksjonærer i prosjektselskapet)"
           >
-            <option value="company">Hele selskapet</option>
-            {(data.projects || []).map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
+            <option value="company">Hele selskapet — full månedsrapport</option>
+            <optgroup label="Enkeltprosjekt (for medaksjonærer)">
+              {(data.projects || []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </optgroup>
           </select>
           <span
             className="text-[11px] hidden md:inline"
@@ -6966,9 +6968,6 @@ function SingleProjectReport({ project: p, data }) {
   const sold = Number(p.unitsSold) || 0;
   const total = Number(p.units) || 0;
   const pct = total > 0 ? Math.round((sold / total) * 100) : 0;
-  const partnerShare = Number(p.partnerShare);
-  const bnShare = isNaN(partnerShare) ? 1 : (100 - partnerShare) / 100;
-  const bnPct = Math.round(bnShare * 100);
   const omsetning = Number(p.omsetning) || 0;
   const db = Number(p.db) || 0;
   const margin = omsetning > 0 ? (db / omsetning) * 100 : 0;
@@ -6985,7 +6984,7 @@ function SingleProjectReport({ project: p, data }) {
             className="text-[10px] tracking-[0.28em] uppercase"
             style={{ opacity: 0.5 }}
           >
-            Konfidensielt — prosjektrapport
+            Konfidensielt — for aksjonærer i prosjektet
           </div>
           <BNLogo light height={36} />
         </div>
@@ -7000,6 +6999,9 @@ function SingleProjectReport({ project: p, data }) {
             style={{ opacity: 0.72, color: COL.goldSoft }}
           >
             Prosjektrapport
+            {meta.reportPeriod
+              ? ` · ${meta.reportPeriod} ${meta.reportYear || ""}`.trimEnd()
+              : ""}
           </div>
           <h1
             className="text-7xl mb-3"
@@ -7021,8 +7023,9 @@ function SingleProjectReport({ project: p, data }) {
               letterSpacing: "-0.01em",
             }}
           >
-            {p.location ? `${p.location} · ` : ""}
-            {meta.companyName} · {meta.reportYear}
+            {p.location}
+            {p.location && meta.companyName ? " · " : ""}
+            {meta.companyName}
           </div>
         </div>
 
@@ -7044,9 +7047,9 @@ function SingleProjectReport({ project: p, data }) {
 
       {/* Content */}
       <div className="report-content px-16 py-12 space-y-12">
-        {/* Oversikt */}
+        {/* Prosjektoversikt */}
         <section>
-          <SectionHeader num="01" title="Oversikt" />
+          <SectionHeader num="01" title="Prosjektoversikt" />
           <div
             className={
               p.imageUrl ? "mt-6 grid grid-cols-1 md:grid-cols-2 gap-6" : "mt-6"
@@ -7085,6 +7088,7 @@ function SingleProjectReport({ project: p, data }) {
                   value={(p.partnerShare ? p.partnerShare + "% " : "") + p.partner}
                 />
               )}
+              {p.bank && <FactRow label="Bank" value={p.bank} />}
               {p.website && (
                 <a
                   href={p.website}
@@ -7100,58 +7104,35 @@ function SingleProjectReport({ project: p, data }) {
           </div>
         </section>
 
-        {/* Økonomi */}
-        <section>
-          <SectionHeader num="02" title="Økonomi" />
-          <div
-            className="kpi-grid grid grid-cols-2 md:grid-cols-4 gap-px mt-6"
-            style={{ background: COL.border }}
-          >
-            <ReportKPI
-              label="Omsetning (prosjekt)"
-              value={omsetning > 0 ? fmtMrd(omsetning) : "—"}
-            />
-            <ReportKPI label="Dekningsbidrag" value={db > 0 ? fmtMrd(db) : "—"} />
-            <ReportKPI label="DB-margin" value={margin > 0 ? fmtPct(margin) : "—"} />
-            <ReportKPI
-              label="Bolig Norge eierandel"
-              value={bnPct + " %"}
-              sub={p.partner ? `Partner: ${p.partner}` : "Heleid"}
-            />
-          </div>
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 text-xs">
-            <div>
-              <FactRow
-                label="Omsetning · BN-andel"
-                value={omsetning > 0 ? fmtMrd(omsetning * bnShare) : "—"}
+        {/* Prosjektøkonomi — prosjektet samlet (100 %), IKKE eierjustert.
+            Medaksjonærene eier prosjektet sammen, så full prosjektøkonomi er
+            riktig ramme for dem. */}
+        {(omsetning > 0 || db > 0) && (
+          <section>
+            <SectionHeader num="02" title="Prosjektøkonomi" />
+            <div
+              className="kpi-grid grid grid-cols-2 md:grid-cols-3 gap-px mt-6"
+              style={{ background: COL.border }}
+            >
+              <ReportKPI
+                label="Brutto omsetning"
+                value={omsetning > 0 ? fmtMrd(omsetning) : "—"}
               />
-              <FactRow
-                label="Dekningsbidrag · BN-andel"
-                value={db > 0 ? fmtMrd(db * bnShare) : "—"}
-              />
+              <ReportKPI label="Dekningsbidrag" value={db > 0 ? fmtMrd(db) : "—"} />
+              <ReportKPI label="DB-margin" value={margin > 0 ? fmtPct(margin) : "—"} />
             </div>
-            <div>
-              {p.merverdiTomt > 0 && (
-                <FactRow label="Merverdi tomt" value={fmtMrd(p.merverdiTomt)} />
-              )}
-              {p.tomtekost > 0 && (
-                <FactRow label="Tomtekost" value={fmtMrd(p.tomtekost)} />
-              )}
-              {p.bank && <FactRow label="Bank" value={p.bank} />}
+            <div
+              className="mt-3 text-[10px] tracking-[0.15em] uppercase"
+              style={{ color: COL.muted }}
+            >
+              Tall for prosjektet samlet (100 % — ikke justert for eierandeler)
             </div>
-          </div>
-          <div
-            className="mt-3 text-[10px] tracking-[0.15em] uppercase"
-            style={{ color: COL.muted }}
-          >
-            Tall vist brutto for prosjektet og justert for Bolig Norges eierandel
-            ({bnPct} %)
-          </div>
-        </section>
+          </section>
+        )}
 
-        {/* Status */}
+        {/* Status & fremdrift */}
         <section>
-          <SectionHeader num="03" title="Status" />
+          <SectionHeader num="03" title="Status & fremdrift" />
           <p
             className="mt-4 text-[14px] leading-[1.7] whitespace-pre-line"
             style={{ color: COL.inkSoft, maxWidth: "80ch" }}

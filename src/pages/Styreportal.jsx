@@ -871,9 +871,9 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
   const totals = computeTotals(data);
 
   // Rapport-omfang: en delingslenke kan være begrenset til ett enkelt prosjekt
-  // (relevant for medaksjonærer i prosjektselskapet). Da viser portalen kun
-  // den fokuserte prosjektrapporten og skjuler selskaps-/porteføljefanene, så
-  // mottakeren ikke ser resten av porteføljen.
+  // (relevant for medaksjonærer i prosjektselskapet). Da rendres en dedikert,
+  // sidemenyløs prosjektrapport — mottakeren ser kun «sitt» prosjekt, ikke
+  // resten av porteføljen eller selskapstall.
   const scopeProject =
     data?.reportScope?.type === "project"
       ? (data.projects || []).find(
@@ -883,18 +883,16 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
         null
       : null;
 
-  const NAV = scopeProject
-    ? [{ id: "dashboard", label: "Prosjektrapport", icon: FileText }]
-    : [
-        { id: "dashboard", label: "Oversikt", icon: LayoutDashboard },
-        { id: "portfolio", label: "Portefølje", icon: Building2 },
-        { id: "pipeline", label: "Pipeline", icon: Target },
-        { id: "financials", label: "Selskapstall", icon: TrendingUp },
-        // Arkiv krever autentisert lesetilgang — skjules i share-modus
-        ...(mode === "share"
-          ? []
-          : [{ id: "archive", label: "Arkiv", icon: Archive }]),
-      ];
+  const NAV = [
+    { id: "dashboard", label: "Oversikt", icon: LayoutDashboard },
+    { id: "portfolio", label: "Portefølje", icon: Building2 },
+    { id: "pipeline", label: "Pipeline", icon: Target },
+    { id: "financials", label: "Selskapstall", icon: TrendingUp },
+    // Arkiv krever autentisert lesetilgang — skjules i share-modus
+    ...(mode === "share"
+      ? []
+      : [{ id: "archive", label: "Arkiv", icon: Archive }]),
+  ];
 
   return (
     <div
@@ -1269,6 +1267,10 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
         )}
       </div>
 
+      {/* Sidemeny + mobil-backdrop skjules helt i enkeltprosjekt-omfang —
+          mottakeren får en dedikert, sidemenyløs prosjektrapport. */}
+      {!scopeProject && (
+      <>
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
@@ -1420,10 +1422,13 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           )}
         </div>
       </aside>
+      </>
+      )}
 
       {/* MAIN */}
       <main className="flex-1 min-w-0">
-        {/* Mobile-only top bar with hamburger */}
+        {/* Mobile-only top bar with hamburger (skjult i prosjekt-omfang) */}
+        {!scopeProject && (
         <div
           className="md:hidden flex items-center justify-between px-4 py-3 border-b print:hidden sticky top-0 z-20"
           style={{ borderColor: COL.border, background: COL.paper }}
@@ -1457,6 +1462,33 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             <span className="w-6" />
           )}
         </div>
+        )}
+
+        {/* Dedikert mobil-topbar i prosjekt-omfang (ingen meny, kun PDF) */}
+        {scopeProject && (
+          <div
+            className="md:hidden flex items-center justify-between px-4 py-3 border-b print:hidden sticky top-0 z-20"
+            style={{ borderColor: COL.border, background: COL.paper }}
+          >
+            <span
+              className="text-[10px] tracking-[0.15em] uppercase"
+              style={{ color: COL.gold, fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              {mode === "share" ? "Frosset kopi" : "Prosjektrapport"}
+            </span>
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] border"
+              style={{
+                borderColor: COL.border,
+                color: COL.ink,
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            >
+              <FileText size={12} /> PDF
+            </button>
+          </div>
+        )}
 
         {page !== "dashboard" && (
           <header
@@ -2065,9 +2097,6 @@ function SingleProjectReport({ project: p, data }) {
   const sold = Number(p.unitsSold) || 0;
   const total = Number(p.units) || 0;
   const pct = total > 0 ? Math.round((sold / total) * 100) : 0;
-  const partnerShare = Number(p.partnerShare);
-  const bnShare = isNaN(partnerShare) ? 1 : (100 - partnerShare) / 100;
-  const bnPct = Math.round(bnShare * 100);
   const omsetning = Number(p.omsetning) || 0;
   const db = Number(p.db) || 0;
   const margin = omsetning > 0 ? (db / omsetning) * 100 : 0;
@@ -2085,7 +2114,7 @@ function SingleProjectReport({ project: p, data }) {
             className="text-[10px] tracking-[0.28em] uppercase"
             style={{ opacity: 0.5 }}
           >
-            Konfidensielt — prosjektrapport
+            Konfidensielt — for aksjonærer i prosjektet
           </div>
           <div className="flex-shrink-0">
             <BNLogo light height={28} className="md:h-9" />
@@ -2102,6 +2131,9 @@ function SingleProjectReport({ project: p, data }) {
             style={{ opacity: 0.72, color: COL.goldSoft }}
           >
             Prosjektrapport
+            {meta.reportPeriod
+              ? ` · ${meta.reportPeriod} ${meta.reportYear || ""}`.trimEnd()
+              : ""}
           </div>
           <h1
             className="text-5xl md:text-7xl mb-3"
@@ -2123,8 +2155,9 @@ function SingleProjectReport({ project: p, data }) {
               letterSpacing: "-0.01em",
             }}
           >
-            {p.location ? `${p.location} · ` : ""}
-            {meta.companyName} · {meta.reportYear}
+            {p.location}
+            {p.location && meta.companyName ? " · " : ""}
+            {meta.companyName}
           </div>
         </div>
 
@@ -2144,9 +2177,9 @@ function SingleProjectReport({ project: p, data }) {
         </div>
       </div>
 
-      {/* §01 — Oversikt */}
+      {/* §01 — Prosjektoversikt */}
       <section>
-        <SectionHeader num="01" title="Oversikt" />
+        <SectionHeader num="01" title="Prosjektoversikt" />
         <div
           className={
             p.imageUrl ? "mt-6 grid grid-cols-1 md:grid-cols-2 gap-6" : "mt-6"
@@ -2185,6 +2218,7 @@ function SingleProjectReport({ project: p, data }) {
                 value={(p.partnerShare ? p.partnerShare + "% " : "") + p.partner}
               />
             )}
+            {p.bank && <FactRow label="Bank" value={p.bank} />}
             {p.website && (
               <a
                 href={p.website}
@@ -2200,62 +2234,37 @@ function SingleProjectReport({ project: p, data }) {
         </div>
       </section>
 
-      {/* §02 — Økonomi */}
-      <section>
-        <SectionHeader num="02" title="Økonomi" />
-        <div
-          className="kpi-grid mt-6 grid grid-cols-2 md:grid-cols-4 gap-px"
-          style={{ background: COL.border }}
-        >
-          <KPICard
-            label="Omsetning (prosjekt)"
-            value={omsetning > 0 ? fmtMrd(omsetning) : "—"}
-            accent
-          />
-          <KPICard
-            label="Dekningsbidrag"
-            value={db > 0 ? fmtMrd(db) : "—"}
-          />
-          <KPICard label="DB-margin" value={margin > 0 ? fmtPct(margin) : "—"} />
-          <KPICard
-            label="Bolig Norge eierandel"
-            value={bnPct + " %"}
-            sub={p.partner ? `Partner: ${p.partner}` : "Heleid"}
-          />
-        </div>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 text-xs">
-          <div>
-            <FactRow
-              label="Omsetning · BN-andel"
-              value={omsetning > 0 ? fmtMrd(omsetning * bnShare) : "—"}
+      {/* §02 — Prosjektøkonomi.
+          Tall vises for prosjektet samlet (100 %), IKKE justert for Bolig
+          Norges eierandel — medaksjonærene eier prosjektet sammen, så den
+          fulle prosjektøkonomien er riktig ramme for dem. */}
+      {(omsetning > 0 || db > 0) && (
+        <section>
+          <SectionHeader num="02" title="Prosjektøkonomi" />
+          <div
+            className="kpi-grid mt-6 grid grid-cols-2 md:grid-cols-3 gap-px"
+            style={{ background: COL.border }}
+          >
+            <KPICard
+              label="Brutto omsetning"
+              value={omsetning > 0 ? fmtMrd(omsetning) : "—"}
+              accent
             />
-            <FactRow
-              label="Dekningsbidrag · BN-andel"
-              value={db > 0 ? fmtMrd(db * bnShare) : "—"}
-            />
+            <KPICard label="Dekningsbidrag" value={db > 0 ? fmtMrd(db) : "—"} />
+            <KPICard label="DB-margin" value={margin > 0 ? fmtPct(margin) : "—"} />
           </div>
-          <div>
-            {p.merverdiTomt > 0 && (
-              <FactRow label="Merverdi tomt" value={fmtMrd(p.merverdiTomt)} />
-            )}
-            {p.tomtekost > 0 && (
-              <FactRow label="Tomtekost" value={fmtMrd(p.tomtekost)} />
-            )}
-            {p.bank && <FactRow label="Bank" value={p.bank} />}
+          <div
+            className="mt-3 text-[10px] tracking-[0.2em] uppercase"
+            style={{ color: COL.muted }}
+          >
+            Tall for prosjektet samlet (100 % — ikke justert for eierandeler)
           </div>
-        </div>
-        <div
-          className="mt-3 text-[10px] tracking-[0.2em] uppercase"
-          style={{ color: COL.muted }}
-        >
-          Tall vist brutto for prosjektet og justert for Bolig Norges eierandel
-          ({bnPct} %)
-        </div>
-      </section>
+        </section>
+      )}
 
-      {/* §03 — Status */}
+      {/* §03 — Status & fremdrift */}
       <section>
-        <SectionHeader num="03" title="Status" />
+        <SectionHeader num="03" title="Status & fremdrift" />
         <div className="project-status mt-5">
           <p
             className="text-[15px] leading-[1.7] whitespace-pre-line"
