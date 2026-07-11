@@ -1,0 +1,48 @@
+name: Supabase keep-alive
+
+# Pinger Bolig Norge-databasen jevnlig så Supabase Free-tier ikke auto-pauser
+# prosjektet etter 7 dagers inaktivitet. (Det var det som skjedde 11. juli
+# 2026 — innloggingen på bolignorge.no feilet med «Failed to fetch» fordi
+# prosjektet bolig-norge-prod var pauset og DNS-oppføringen fjernet.)
+#
+# Kjøring mandag + torsdag gir aldri mer enn 4 døgn mellom pings — godt
+# innenfor 7-dagers-grensen. Feiler jobben (databasen svarer ikke), sender
+# GitHub e-postvarsel til repo-eier.
+#
+# NB: GitHub deaktiverer scheduled workflows automatisk hvis repoet er uten
+# aktivitet i 60 dager (e-postvarsel sendes først). Skjer det: Actions-fanen
+# → «Supabase keep-alive» → «Enable workflow».
+#
+# Kan slettes når som helst — f.eks. ved oppgradering til Supabase Pro
+# (Pro-prosjekter pauses aldri).
+
+on:
+  schedule:
+    - cron: "17 6 * * 1,4" # mandag og torsdag kl. 06:17 UTC
+  workflow_dispatch: {} # manuell kjøring fra Actions-fanen
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping databasen (registreres som aktivitet)
+        run: |
+          # Anon-nøkkelen under er OFFENTLIG by design: den serveres til alle
+          # besøkende i frontend-bundlen på bolignorge.no. Dataene beskyttes
+          # av Row Level Security i databasen, ikke av nøkkelen.
+          URL="https://iqehhiawpjcuqcrdbiig.supabase.co"
+          KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxZWhoaWF3cGpjdXFjcmRiaWlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMTIxODEsImV4cCI6MjA5MzU4ODE4MX0.vsXtV3QwvxUrzpcLZLNupXIDqzXg5J1ObPtxfPJCstI"
+
+          code=$(curl -sS -o resp.json -w "%{http_code}" \
+            "$URL/rest/v1/dashboard_state?select=id&limit=1" \
+            -H "apikey: $KEY" \
+            -H "Authorization: Bearer $KEY")
+          echo "REST-svar: HTTP $code"
+          cat resp.json 2>/dev/null || true
+
+          # Alle svar < 500 betyr at databasen er våken og spørringen kjørte
+          # (RLS kan gi tom liste/403 for anon — det er fortsatt aktivitet).
+          if [ "$code" -ge 500 ]; then
+            echo "::error::Databasen svarte med HTTP $code — sjekk om prosjektet er pauset: https://supabase.com/dashboard/project/iqehhiawpjcuqcrdbiig"
+            exit 1
+          fi
