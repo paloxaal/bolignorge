@@ -910,47 +910,52 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           .print-only { display: none !important; }
         }
         @media print {
-          /* Default page: A4 with comfortable top margin so section headings
-             and project headers don't sit pinched against the page edge. */
+          /* Null sidemarger: margflater males aldri av bakgrunnen i
+             Chromiums paginerte utskrift (verken canvas-bakgrunn, skygger
+             eller fixed-elementer når ut dit), så eneste måte å få
+             bakgrunnsfargen helt ut på arket er å la innholdsflaten dekke
+             hele siden. Avstandene bor i stedet i innholdet: seksjonene
+             er breddelåst til 186 mm og sentreres, og vertikal luft
+             kommer fra seksjonenes egen padding. Bunnteksten gjenskapes
+             som fixed-element (gjentas på hver side); sidetall er ikke
+             mulig utenfor margbokser og er droppet. */
           @page {
             size: A4;
-            margin: 17mm 12mm 18mm 12mm;
-            @bottom-left {
-              content: "Bolig Norge AS — Konfidensielt";
-              font-family: 'JetBrains Mono', monospace;
-              font-size: 8.5px;
-              letter-spacing: 0.08em;
-              color: #8A8270;
-              padding-bottom: 8mm;
-            }
-            @bottom-right {
-              content: counter(page) " / " counter(pages);
-              font-family: 'JetBrains Mono', monospace;
-              font-size: 8.5px;
-              color: #8A8270;
-              padding-bottom: 8mm;
-            }
-          }
-          /* First page (cover): no margin, no footer — full bleed */
-          @page :first {
             margin: 0;
-            @bottom-left  { content: ""; }
-            @bottom-right { content: ""; }
           }
-          /* Last page (closing/back-cover): same treatment as cover so the
-             dark navy background bleeds to the page edges and the page
-             footer doesn't intrude into the signoff art. The page is
-             selected via the "page: closing-page" property on .report-closing. */
-          @page closing-page {
-            margin: 0;
-            @bottom-left  { content: ""; }
-            @bottom-right { content: ""; }
+          /* Bunntekst på hver side — skjules på forsiden/baksiden ved at
+             de mørke flatene (z-index 1) maler over den. */
+          body::after {
+            content: "Bolig Norge AS — Konfidensielt · Styremateriale" !important;
+            position: fixed !important;
+            bottom: 6mm !important;
+            left: 12mm !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            font-size: 8.5px !important;
+            letter-spacing: 0.08em !important;
+            color: #8A8270 !important;
+            z-index: 0 !important;
           }
 
           html, body {
             background: #F6F1E7 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+          }
+          /* Margflatene males ikke av canvas-bakgrunnen i paginert
+             utskrift og ble stående hvite. Et fixed-posisjonert underlag
+             gjentas på hver side og maler hele arket (inkl. margene)
+             kremfarget, bak alt innhold. Forsiden/baksiden maler sine
+             mørke flater oppå. */
+          body::before {
+            content: "" !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            background: #F6F1E7 !important;
+            z-index: -1 !important;
           }
           * {
             -webkit-print-color-adjust: exact !important;
@@ -972,6 +977,13 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             width: auto !important;
             max-width: 100% !important;
           }
+          /* Innholdswrapperen har skjerm-padding (px-4/md:px-10) som
+             forsiden normalt opphever med negative marger — men de
+             nullstilles i print, så forsiden ble stående innrykket med
+             en lys stripe langs kanten. Null padding i print. */
+          .content-pad {
+            padding: 0 !important;
+          }
           html, body {
             margin: 0 !important;
             padding: 0 !important;
@@ -990,7 +1002,16 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           .cover-hero {
             margin: 0 !important;
             padding: 26mm 22mm 22mm 22mm !important;
-            min-height: calc(297mm - 32mm) !important;
+            /* Forsiden ligger på @page :first med margin 0 — full A4-høyde.
+               (Var 297mm − 32mm fra den gang :first-margene ikke slo inn;
+               det ga en lys stripe nederst på forsiden.) Skyggen maler
+               eventuelle rest-mm mot arkkanten, som på baksiden. */
+            /* Fyller hele arket (margin 0 på alle sider). Ingen skygge her
+               — en nedovervendt skygge blør over på toppen av side 2 når
+               sidene ikke har marger. */
+            min-height: 297mm !important;
+            position: relative !important;
+            z-index: 1 !important;
             box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
@@ -1012,7 +1033,6 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
              the full A4 height so the background covers the entire page
              regardless of Chrome's quirky @page margin handling. */
           .report-closing {
-            page: closing-page !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: space-between !important;
@@ -1024,10 +1044,10 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             color: #F6F1E7 !important;
             border: none !important;
             border-radius: 0 !important;
-            /* NB: ingen eksplisitt break-before her — byttet til den
-               navngitte @page-regelen (page: closing-page) tvinger
-               allerede sideskift, og et eksplisitt break-before i
-               tillegg ga en helt tom side foran baksiden. */
+            /* Den navngitte closing-page-regelen er borte (alle sider har
+               nå margin 0), så baksiden trenger ett eksplisitt sideskift. */
+            break-before: page !important;
+            page-break-before: always !important;
             break-inside: avoid !important;
             page-break-inside: avoid !important;
             /* Pagineringen korter av og til boksen noen mm før arkkanten,
@@ -1035,6 +1055,8 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
                resten av siden mørk uten å påvirke layout eller sideskift
                (skygger klippes ved arkkanten og lager aldri ny side). */
             box-shadow: 0 60mm 0 0 #0E1A2B !important;
+            position: relative !important;
+            z-index: 1 !important;
           }
 
           /* PDF-motoren legger ut siden på A4 minus sidemarger (~703 px) —
@@ -1056,6 +1078,11 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             margin: 0 !important;
             background: #F6F1E7 !important;
             max-width: 100% !important;
+            /* Margflatene rundt innholdet males ikke av canvas-bakgrunnen
+               i paginert utskrift — de ble stående hvite. Spredningsskyggen
+               maler 25 mm utover fragmentet på hver side (klippes ved
+               arkkanten), så bakgrunnsfargen går helt ut på alle sider. */
+            box-shadow: 0 0 0 25mm #F6F1E7 !important;
           }
           .report-flow > * + * { margin-top: 7mm !important; }
           /* Chromium-paginering måler enkelte blokker mot papirbredden
@@ -1068,6 +1095,15 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             width: 186mm !important;
             max-width: 186mm !important;
             box-sizing: border-box !important;
+            /* Sidene har ingen marger lenger — sentrer innholdet på
+               arket (12 mm luft på hver side av 186 mm). */
+            margin-left: auto !important;
+            margin-right: auto !important;
+          }
+          /* Nederst på hver side skal innholdet ikke kollidere med den
+             fixed-posisjonerte bunnteksten. */
+          .report-flow > section:last-of-type {
+            margin-bottom: 14mm !important;
           }
 
           /* Section headers stay with their first content */
@@ -1124,7 +1160,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
              page on the §04 spread and would overflow page 7 with extra top
              padding) are excluded so we don't double up or break pagination. */
           .report-flow > section:not(.chart-panel-card):not(.market-section):not(.prosjektstatus-block) {
-            padding-top: 10mm !important;
+            padding-top: 14mm !important;
           }
 
           /* Project blocks — small bump so a block landing at the top of
@@ -1590,7 +1626,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             </div>
           </header>
         )}
-        <div className="px-4 py-6 md:px-10 md:py-8">
+        <div className="content-pad px-4 py-6 md:px-10 md:py-8">
           {page === "dashboard" &&
             (scopeProject ? (
               <SingleProjectReport project={scopeProject} data={data} />
