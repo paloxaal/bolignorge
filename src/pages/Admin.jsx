@@ -5761,9 +5761,12 @@ function ReportPage({ data, setData, totals }) {
         .replaceAll("/", "_")
         .replaceAll("=", "");
 
-      const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000); // +2 dager
+      const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // +14 dager
 
-      const { error } = await supabase.from("share_tokens").insert({
+      // Også dette kallet trenger en tidsfrist — snapshotet er på størrelse
+      // med hele dashbordet, og henger opplastingen ble «Genererer …»
+      // stående for alltid.
+      const insertPromise = supabase.from("share_tokens").insert({
         token,
         snapshot: shareSnapshot,
         expires_at: expiresAt.toISOString(),
@@ -5772,6 +5775,16 @@ function ReportPage({ data, setData, totals }) {
             ? `${shareSnapshot.reportScope.projectName} · ${reportLabel}`.trim()
             : reportLabel || null,
       });
+      const insertTimeout = new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error("Tidsavbrudd ved generering (30 s) — prøv igjen")
+            ),
+          30000
+        )
+      );
+      const { error } = await Promise.race([insertPromise, insertTimeout]);
       if (error) throw error;
 
       const url = `${window.location.origin}/styreportal/share/${token}`;
@@ -6167,7 +6180,7 @@ function ReportPage({ data, setData, totals }) {
                 letterSpacing: "-0.01em",
               }}
             >
-              Lag delingslenke (gyldig i 2 dager)
+              Lag delingslenke (gyldig i 14 dager)
             </h3>
             <p
               className="text-[12px] mt-1 max-w-2xl"
@@ -6175,7 +6188,7 @@ function ReportPage({ data, setData, totals }) {
             >
               Genererer en uknekkelig lenke som styremedlemmer kan bruke for å se
               en frosset kopi av rapporten uten å logge inn. Lenken er
-              legitimasjonen — be styret om ikke å videresende. Etter 2 dager
+              legitimasjonen — be styret om ikke å videresende. Etter 14 dager
               må de logge inn på vanlig vis.
             </p>
           </div>
