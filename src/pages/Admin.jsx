@@ -428,6 +428,17 @@ const compressImage = (file, { maxDim = 1600, quality = 0.82 } = {}) =>
   });
 
 const STORAGE_KEY = "bn_dashboard_v1";
+
+// Flerfane-vern: hver fane holder hele rapporten i minnet og skriver hele
+// dokumentet ved lagring — to åpne admin-faner kan derfor overskrive
+// hverandres endringer (siste skriver vinner). Når én fane lagrer, varsles
+// de andre, som viser et tydelig «last på nytt»-banner før videre arbeid.
+const TAB_ID = Math.random().toString(36).slice(2);
+const saveChannel =
+  typeof BroadcastChannel !== "undefined"
+    ? new BroadcastChannel("bn_dashboard_saves")
+    : null;
+
 const storage = {
   get: async () => {
     try {
@@ -476,6 +487,7 @@ const storage = {
         console.error("[dashboard] save error:", error.message);
         return { ok: false, error: error.message };
       }
+      saveChannel?.postMessage({ tab: TAB_ID });
       return { ok: true };
     };
     const timeoutPromise = new Promise((resolve) =>
@@ -1015,6 +1027,18 @@ function AdminDashboard() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [saveStatus]);
 
+  // Lytt etter lagringer fra andre faner — denne fanens minnekopi er da
+  // utdatert, og en lagring herfra ville overskrevet den andre fanens arbeid.
+  const [staleFromOtherTab, setStaleFromOtherTab] = useState(false);
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const bc = new BroadcastChannel("bn_dashboard_saves");
+    bc.onmessage = (e) => {
+      if (e.data?.tab && e.data.tab !== TAB_ID) setStaleFromOtherTab(true);
+    };
+    return () => bc.close();
+  }, []);
+
   if (loading || !data) {
     return (
       <div
@@ -1084,6 +1108,30 @@ function AdminDashboard() {
       }}
     >
       <FontImports />
+      {staleFromOtherTab && (
+        <div
+          className="fixed top-0 inset-x-0 z-[200] px-4 py-3 text-center text-[13px] print:hidden"
+          style={{ background: COL.burgundy, color: "#FBF5E8" }}
+        >
+          Rapporten er lagret fra en annen fane — denne fanen viser utdaterte
+          data. En lagring herfra vil overskrive den andre fanens arbeid.{" "}
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              textDecoration: "underline",
+              fontWeight: 700,
+              background: "none",
+              border: "none",
+              color: "inherit",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            Last siden på nytt
+          </button>{" "}
+          før du gjør endringer.
+        </div>
+      )}
       <div className="hidden md:flex items-center" style={{ position: "fixed", top: 0, right: 0, zIndex: 100, padding: "12px 20px", background: COL.paper, borderBottom: `1px solid ${COL.border}`, borderLeft: `1px solid ${COL.border}`, borderBottomLeftRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, gap: 16 }}>
         <span style={{ color: COL.muted }}>{profile?.full_name || profile?.email}</span>
         <button onClick={signOut} style={{ display: "flex", alignItems: "center", gap: 6, color: COL.ink, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
@@ -5761,9 +5809,12 @@ function ReportPage({ data, setData, totals }) {
         .replaceAll("/", "_")
         .replaceAll("=", "");
 
-      const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000); // +2 dager
+      const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // +14 dager
 
-      const { error } = await supabase.from("share_tokens").insert({
+      // Også dette kallet trenger en tidsfrist — snapshotet er på størrelse
+      // med hele dashbordet, og henger opplastingen ble «Genererer …»
+      // stående for alltid.
+      const insertPromise = supabase.from("share_tokens").insert({
         token,
         snapshot: shareSnapshot,
         expires_at: expiresAt.toISOString(),
@@ -5772,6 +5823,16 @@ function ReportPage({ data, setData, totals }) {
             ? `${shareSnapshot.reportScope.projectName} · ${reportLabel}`.trim()
             : reportLabel || null,
       });
+      const insertTimeout = new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error("Tidsavbrudd ved generering (30 s) — prøv igjen")
+            ),
+          30000
+        )
+      );
+      const { error } = await Promise.race([insertPromise, insertTimeout]);
       if (error) throw error;
 
       const url = `${window.location.origin}/styreportal/share/${token}`;
@@ -6167,7 +6228,7 @@ function ReportPage({ data, setData, totals }) {
                 letterSpacing: "-0.01em",
               }}
             >
-              Lag delingslenke (gyldig i 2 dager)
+              Lag delingslenke (gyldig i 14 dager)
             </h3>
             <p
               className="text-[12px] mt-1 max-w-2xl"
@@ -6175,7 +6236,7 @@ function ReportPage({ data, setData, totals }) {
             >
               Genererer en uknekkelig lenke som styremedlemmer kan bruke for å se
               en frosset kopi av rapporten uten å logge inn. Lenken er
-              legitimasjonen — be styret om ikke å videresende. Etter 2 dager
+              legitimasjonen — be styret om ikke å videresende. Etter 14 dager
               må de logge inn på vanlig vis.
             </p>
           </div>
