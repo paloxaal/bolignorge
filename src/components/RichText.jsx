@@ -11,8 +11,10 @@ import { COL } from "../data";
  * Kun http/https slipper gjennom regexen, så javascript:-lenker o.l. er
  * ikke mulig å smugle inn via statustekstene.
  */
+// Mellomrom mellom ] og ( tillates — det er lett å skrive
+// «[her] (lenke)» i stedet for «[her](lenke)», og begge skal virke.
 const LINK_RE =
-  /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()[\]]*[^\s<>()[\].,;:!?'"«»])/g;
+  /\[([^\]]+)\]\s*\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()[\]]*[^\s<>()[\].,;:!?'"«»])/g;
 
 export default function RichText({ text, linkColor = COL.gold }) {
   if (!text) return null;

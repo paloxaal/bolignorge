@@ -455,35 +455,41 @@ const storage = {
     }
   },
   set: async (_key, value) => {
-    try {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user?.id) {
-        return { ok: false, error: "Ikke logget inn (sesjon utløpt)" };
+    // Hele operasjonen — også sesjonssjekken — må ligge under én felles
+    // tidsfrist. auth-kallet kan henge i enkelte sesjonstilstander, og lå
+    // det utenfor fristen, ble «Lagrer…» stående for alltid uten feil.
+    const doWrite = async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id;
+      if (!userId) {
+        return {
+          ok: false,
+          error: "Ikke logget inn (sesjon utløpt) — logg ut og inn igjen",
+        };
       }
-      const upsertPromise = supabase
-        .from("dashboard_state")
-        .upsert({
-          id: "main",
-          data: JSON.parse(value),
-          updated_by: userData.user.id,
-        });
-      // Uten tidsfrist blir «Lagrer…» stående for alltid hvis
-      // opplastingen henger — da må feilen heller vises.
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(
-          () =>
-            reject(
-              new Error("Tidsavbrudd ved lagring (30 s) — sjekk nettforbindelsen")
-            ),
-          30000
-        )
-      );
-      const { error } = await Promise.race([upsertPromise, timeoutPromise]);
+      const { error } = await supabase.from("dashboard_state").upsert({
+        id: "main",
+        data: JSON.parse(value),
+        updated_by: userId,
+      });
       if (error) {
         console.error("[dashboard] save error:", error.message);
         return { ok: false, error: error.message };
       }
       return { ok: true };
+    };
+    const timeoutPromise = new Promise((resolve) =>
+      setTimeout(
+        () =>
+          resolve({
+            ok: false,
+            error: "Tidsavbrudd ved lagring (30 s) — sjekk nettforbindelsen",
+          }),
+        30000
+      )
+    );
+    try {
+      return await Promise.race([doWrite(), timeoutPromise]);
     } catch (e) {
       console.error("[dashboard] save failed:", e.message);
       return { ok: false, error: e.message };
