@@ -5661,6 +5661,8 @@ function ReportPage({ data, setData, totals }) {
   const [shareLink, setShareLink] = useState(null);
   const [shareError, setShareError] = useState(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [pdfGenerating, setPdfGenerating] = useState(false);
+  const [pdfError, setPdfError] = useState(null);
   // Rapport-omfang: "company" (hele selskapet) eller en prosjekt-id. Styrer
   // både forhåndsvisning/PDF og hva delingslenken inneholder.
   const [reportScope, setReportScope] = useState("company");
@@ -5729,112 +5731,129 @@ function ReportPage({ data, setData, totals }) {
     URL.revokeObjectURL(url);
   };
 
+  // Bygger snapshot (med ev. oppdatert meta fra label-feltet), flusher
+  // dashbordet til databasen først, og slanker kopien ved enkeltprosjekt-
+  // omfang. Brukes av både delingslenken og PDF-genereringen.
+  const prepareSnapshot = async () => {
+    // Beregn potensielt oppdatert meta basert på pending label-edit
+    const text = reportLabel.trim();
+    let newPeriod = data.meta?.reportPeriod;
+    let newYear = data.meta?.reportYear;
+    if (text) {
+      const yearMatch = text.match(/(\d{4})\s*$/);
+      if (yearMatch) {
+        newYear = parseInt(yearMatch[1]);
+        newPeriod = text.replace(/\s*\d{4}\s*$/, "").trim();
+      } else {
+        newPeriod = text;
+      }
+    }
+    const metaChanged =
+      newPeriod !== data.meta?.reportPeriod ||
+      newYear !== data.meta?.reportYear;
+
+    // Bygg snapshot med oppdatert meta direkte
+    const snapshotData = metaChanged
+      ? {
+          ...data,
+          meta: {
+            ...data.meta,
+            reportPeriod: newPeriod,
+            reportYear: newYear,
+          },
+        }
+      : data;
+
+    // Propager meta til React state (autosave persisterer)
+    if (metaChanged) {
+      setData((d) => ({
+        ...d,
+        meta: { ...d.meta, reportPeriod: newPeriod, reportYear: newYear },
+      }));
+    }
+
+    // FORCE-FLUSH: skriv snapshot-data direkte til dashboard_state FØR vi
+    // setter share_token-raden, så vi vet at alle pending edits er persistert.
+    // Eliminerer race-condition mellom autosave-debounce og genereringen.
+    const flushResult = await storage.set(STORAGE_KEY, JSON.stringify(snapshotData));
+    if (!flushResult?.ok) {
+      throw new Error(`Kunne ikke lagre data før generering: ${flushResult?.error || "ukjent feil"}`);
+    }
+
+    // Live-dashbordet flushes alltid komplett (over), men ved enkeltprosjekt-
+    // omfang slankes selve kopien til kun det prosjektet (+ omfangsmarkør).
+    // Da ser medaksjonærer kun «sitt» prosjekt — resten av porteføljen og
+    // selskaps-/pipeline-tall utelates.
+    let shareSnapshot = snapshotData;
+    if (reportScope !== "company") {
+      const proj = (snapshotData.projects || []).find(
+        (p) => p.id === reportScope
+      );
+      shareSnapshot = {
+        ...snapshotData,
+        projects: proj ? [proj] : [],
+        pipeline: [],
+        financials: [],
+        reportScope: {
+          type: "project",
+          projectId: reportScope,
+          projectName: proj?.name || "",
+        },
+      };
+    }
+    return shareSnapshot;
+  };
+
+  // Oppretter en share_tokens-rad og returnerer tokenet.
+  const insertShareToken = async (shareSnapshot, expiresAt, label) => {
+    // 24 bytes = 192 bits entropi → ~32 base64url-tegn
+    const bytes = new Uint8Array(24);
+    window.crypto.getRandomValues(bytes);
+    const token = btoa(String.fromCharCode(...bytes))
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replaceAll("=", "");
+
+    // Også dette kallet trenger en tidsfrist — snapshotet er på størrelse
+    // med hele dashbordet, og henger opplastingen ble genereringen
+    // stående for alltid.
+    const insertPromise = supabase.from("share_tokens").insert({
+      token,
+      snapshot: shareSnapshot,
+      expires_at: expiresAt.toISOString(),
+      report_label: label || null,
+    });
+    const insertTimeout = new Promise((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error("Tidsavbrudd ved generering (30 s) — prøv igjen")
+          ),
+        30000
+      )
+    );
+    const { error } = await Promise.race([insertPromise, insertTimeout]);
+    if (error) throw error;
+    return token;
+  };
+
+  const shareLabel = (shareSnapshot) =>
+    shareSnapshot.reportScope?.projectName
+      ? `${shareSnapshot.reportScope.projectName} · ${reportLabel}`.trim()
+      : reportLabel || null;
+
   const generateShareLink = async () => {
     setShareGenerating(true);
     setShareError(null);
     setShareCopied(false);
     try {
-      // Beregn potensielt oppdatert meta basert på pending label-edit
-      const text = reportLabel.trim();
-      let newPeriod = data.meta?.reportPeriod;
-      let newYear = data.meta?.reportYear;
-      if (text) {
-        const yearMatch = text.match(/(\d{4})\s*$/);
-        if (yearMatch) {
-          newYear = parseInt(yearMatch[1]);
-          newPeriod = text.replace(/\s*\d{4}\s*$/, "").trim();
-        } else {
-          newPeriod = text;
-        }
-      }
-      const metaChanged =
-        newPeriod !== data.meta?.reportPeriod ||
-        newYear !== data.meta?.reportYear;
-
-      // Bygg snapshot med oppdatert meta direkte
-      const snapshotData = metaChanged
-        ? {
-            ...data,
-            meta: {
-              ...data.meta,
-              reportPeriod: newPeriod,
-              reportYear: newYear,
-            },
-          }
-        : data;
-
-      // Propager meta til React state (autosave persisterer)
-      if (metaChanged) {
-        setData((d) => ({
-          ...d,
-          meta: { ...d.meta, reportPeriod: newPeriod, reportYear: newYear },
-        }));
-      }
-
-      // FORCE-FLUSH: skriv snapshot-data direkte til dashboard_state FØR vi
-      // setter share_token-raden, så vi vet at alle pending edits er persistert.
-      // Eliminerer race-condition mellom 400ms autosave-debounce og link-generering.
-      const flushResult = await storage.set(STORAGE_KEY, JSON.stringify(snapshotData));
-      if (!flushResult?.ok) {
-        throw new Error(`Kunne ikke lagre data før lenke: ${flushResult?.error || "ukjent feil"}`);
-      }
-
-      // Bygg snapshot for delingslenken. Live-dashbordet flushes alltid komplett
-      // (over), men ved enkeltprosjekt-omfang slankes selve delings-kopien til
-      // kun det prosjektet (+ omfangsmarkør). Da ser medaksjonærer kun «sitt»
-      // prosjekt — resten av porteføljen og selskaps-/pipeline-tall utelates.
-      let shareSnapshot = snapshotData;
-      if (reportScope !== "company") {
-        const proj = (snapshotData.projects || []).find(
-          (p) => p.id === reportScope
-        );
-        shareSnapshot = {
-          ...snapshotData,
-          projects: proj ? [proj] : [],
-          pipeline: [],
-          financials: [],
-          reportScope: {
-            type: "project",
-            projectId: reportScope,
-            projectName: proj?.name || "",
-          },
-        };
-      }
-
-      // 24 bytes = 192 bits entropi → ~32 base64url-tegn
-      const bytes = new Uint8Array(24);
-      window.crypto.getRandomValues(bytes);
-      const token = btoa(String.fromCharCode(...bytes))
-        .replaceAll("+", "-")
-        .replaceAll("/", "_")
-        .replaceAll("=", "");
-
+      const shareSnapshot = await prepareSnapshot();
       const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // +14 dager
-
-      // Også dette kallet trenger en tidsfrist — snapshotet er på størrelse
-      // med hele dashbordet, og henger opplastingen ble «Genererer …»
-      // stående for alltid.
-      const insertPromise = supabase.from("share_tokens").insert({
-        token,
-        snapshot: shareSnapshot,
-        expires_at: expiresAt.toISOString(),
-        report_label:
-          shareSnapshot.reportScope?.projectName
-            ? `${shareSnapshot.reportScope.projectName} · ${reportLabel}`.trim()
-            : reportLabel || null,
-      });
-      const insertTimeout = new Promise((_, reject) =>
-        setTimeout(
-          () =>
-            reject(
-              new Error("Tidsavbrudd ved generering (30 s) — prøv igjen")
-            ),
-          30000
-        )
+      const token = await insertShareToken(
+        shareSnapshot,
+        expiresAt,
+        shareLabel(shareSnapshot)
       );
-      const { error } = await Promise.race([insertPromise, insertTimeout]);
-      if (error) throw error;
-
       const url = `${window.location.origin}/styreportal/share/${token}`;
       setShareLink({ url, expiresAt });
     } catch (e) {
@@ -5842,6 +5861,60 @@ function ReportPage({ data, setData, totals }) {
       setShareError(e.message || "Klarte ikke lage lenke");
     } finally {
       setShareGenerating(false);
+    }
+  };
+
+  // Genererer en deterministisk PDF på serveren (headless Chromium) i
+  // stedet for nettleserens print-dialog, som ga vilkårlige resultater
+  // (blanke sider, manglende bakgrunner) — særlig i Safari.
+  const handleGeneratePdf = async () => {
+    setPdfGenerating(true);
+    setPdfError(null);
+    try {
+      const shareSnapshot = await prepareSnapshot();
+      // Kortlevd token — brukes kun av selve genereringen
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+      const token = await insertShareToken(
+        shareSnapshot,
+        expiresAt,
+        `${shareLabel(shareSnapshot) || "Månedsrapport"} (PDF-generering)`
+      );
+      const fileLabel = shareSnapshot.reportScope?.projectName
+        ? `${shareSnapshot.reportScope.projectName} - ${reportLabel}`.trim()
+        : `Bolig Norge - Manedsrapport ${reportLabel}`.trim();
+
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 90000);
+      const resp = await fetch(
+        `/api/generate-pdf?token=${encodeURIComponent(token)}&filename=${encodeURIComponent(fileLabel)}`,
+        { signal: controller.signal }
+      );
+      clearTimeout(t);
+      if (!resp.ok) {
+        let msg = `PDF-generering feilet (HTTP ${resp.status})`;
+        try {
+          msg = (await resp.json()).error || msg;
+        } catch {
+          // beholder standardmeldingen
+        }
+        throw new Error(msg);
+      }
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `${fileLabel}.pdf`;
+      a.click();
+      URL.revokeObjectURL(blobUrl);
+    } catch (e) {
+      console.error("[pdf] generate failed:", e.message);
+      setPdfError(
+        e.name === "AbortError"
+          ? "Tidsavbrudd ved PDF-generering (90 s) — prøv igjen"
+          : e.message || "PDF-generering feilet"
+      );
+    } finally {
+      setPdfGenerating(false);
     }
   };
 
@@ -6189,7 +6262,20 @@ function ReportPage({ data, setData, totals }) {
               : "Full månedsrapport — klar for utskrift / PDF"}
           </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {pdfError && (
+            <span
+              className="text-[11px] py-1 px-2 border-l-2"
+              style={{
+                background: "rgba(139, 46, 58, 0.06)",
+                borderLeftColor: COL.burgundy,
+                color: COL.burgundy,
+                maxWidth: 320,
+              }}
+            >
+              {pdfError}
+            </span>
+          )}
           <button
             onClick={handleExport}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs border"
@@ -6199,10 +6285,30 @@ function ReportPage({ data, setData, totals }) {
           </button>
           <button
             onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
-            style={{ background: COL.ink, color: COL.paper }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border"
+            style={{ borderColor: COL.border, color: COL.inkSoft }}
+            title="Nettleserens utskriftsdialog — resultatet varierer med nettleser. Bruk «Generer PDF» for et deterministisk resultat."
           >
-            <FileText size={12} /> Skriv ut / PDF
+            <FileText size={12} /> Skriv ut
+          </button>
+          <button
+            onClick={handleGeneratePdf}
+            disabled={pdfGenerating}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+            style={{
+              background: COL.ink,
+              color: COL.paper,
+              opacity: pdfGenerating ? 0.6 : 1,
+              cursor: pdfGenerating ? "wait" : "pointer",
+            }}
+            title="Genererer rapporten som PDF på serveren — samme perfekte resultat hver gang, uavhengig av nettleser"
+          >
+            {pdfGenerating ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <FileText size={12} />
+            )}
+            {pdfGenerating ? "Genererer PDF …" : "Generer PDF"}
           </button>
         </div>
       </div>
