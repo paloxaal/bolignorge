@@ -465,7 +465,7 @@ const storage = {
       return null;
     }
   },
-  set: async (_key, value) => {
+  set: async (_key, value, timeoutMs = 30000) => {
     // Hele operasjonen — også sesjonssjekken — må ligge under én felles
     // tidsfrist. auth-kallet kan henge i enkelte sesjonstilstander, og lå
     // det utenfor fristen, ble «Lagrer…» stående for alltid uten feil.
@@ -495,9 +495,9 @@ const storage = {
         () =>
           resolve({
             ok: false,
-            error: "Tidsavbrudd ved lagring (30 s) — sjekk nettforbindelsen",
+            error: `Tidsavbrudd ved lagring (${Math.round(timeoutMs / 1000)} s) — sjekk nettforbindelsen`,
           }),
-        30000
+        timeoutMs
       )
     );
     try {
@@ -5773,12 +5773,19 @@ function ReportPage({ data, setData, totals }) {
     }
 
     // FORCE-FLUSH: skriv snapshot-data direkte til dashboard_state FØR vi
-    // setter share_token-raden, så vi vet at alle pending edits er persistert.
-    // Eliminerer race-condition mellom autosave-debounce og genereringen.
-    const flushResult = await storage.set(STORAGE_KEY, JSON.stringify(snapshotData));
-    if (!flushResult?.ok) {
-      throw new Error(`Kunne ikke lagre data før generering: ${flushResult?.error || "ukjent feil"}`);
-    }
+    // setter share_token-raden, så alle pending edits er persistert.
+    // MEN: snapshotet tas uansett komplett fra minnet, så en treg/feilet
+    // lagring skal ikke stoppe genereringen — den meldes som advarsel,
+    // og dashboard-lagringen tas igjen av autosave. Romslig frist (60 s)
+    // siden payloaden kan være stor på tregt nett.
+    const flushResult = await storage.set(
+      STORAGE_KEY,
+      JSON.stringify(snapshotData),
+      60000
+    );
+    const flushWarning = flushResult?.ok
+      ? null
+      : `Merk: dashbordet fikk ikke lagret (${flushResult?.error || "ukjent feil"}) — genereringen fortsatte fra gjeldende data. Sjekk «Lagret»-indikatoren øverst.`;
 
     // Live-dashbordet flushes alltid komplett (over), men ved enkeltprosjekt-
     // omfang slankes selve kopien til kun det prosjektet (+ omfangsmarkør).
