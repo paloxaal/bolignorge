@@ -7,8 +7,16 @@
 // Tokenet er legitimasjonen (samme modell som delingslenkene): klienten
 // oppretter et kortlevd share_token først, og RLS i databasen avviser
 // utløpte/ugyldige tokens — funksjonen selv trenger ingen hemmeligheter.
-import chromium from "@sparticuz/chromium";
+import chromium from "@sparticuz/chromium-min";
 import puppeteer from "puppeteer-core";
+
+// Chromium lastes ned som komplett, selvforsynt pakke (binær + delte
+// biblioteker) ved første kjøring og caches i /tmp mellom varme kall.
+// Å bundle binæren i deployen (@sparticuz/chromium uten -min) feilet på
+// Vercel: filsporingen droppet de delte bibliotekene, og oppstarten døde
+// med «error while loading shared libraries: libnss3.so».
+const CHROMIUM_PACK =
+  "https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar";
 
 export default async function handler(req, res) {
   const { token, filename } = req.query || {};
@@ -29,7 +37,8 @@ export default async function handler(req, res) {
       args: chromium.args,
       defaultViewport: { width: 1280, height: 900 },
       executablePath:
-        process.env.PDF_CHROMIUM_PATH || (await chromium.executablePath()),
+        process.env.PDF_CHROMIUM_PATH ||
+        (await chromium.executablePath(CHROMIUM_PACK)),
       headless: true,
     });
     const page = await browser.newPage();
