@@ -1030,6 +1030,11 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
                tillegg ga en helt tom side foran baksiden. */
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+            /* Pagineringen korter av og til boksen noen mm før arkkanten,
+               som ga en lys stripe nederst på baksiden. Skyggen maler
+               resten av siden mørk uten å påvirke layout eller sideskift
+               (skygger klippes ved arkkanten og lager aldri ny side). */
+            box-shadow: 0 60mm 0 0 #0E1A2B !important;
           }
 
           /* PDF-motoren legger ut siden på A4 minus sidemarger (~703 px) —
@@ -1156,11 +1161,33 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           .project-block {
             break-inside: auto !important;
             page-break-inside: auto !important;
-            /* 12 mm topp-padding gir tydelig luft mellom to prosjekter
+            /* 10 mm topp-padding gir tydelig luft mellom to prosjekter
                som deler side, i stedet for at all slakk samles nederst
-               på siden. */
-            padding-top: 12mm !important;
-            padding-bottom: 4mm !important;
+               på siden — samtidig som overskrift + to prosjekter går
+               inn på §03-førstesiden. */
+            padding-top: 10mm !important;
+            padding-bottom: 3mm !important;
+          }
+          /* To prosjekter per side: tving sideskift foran hvert
+             oddetalls-prosjekt fra og med det tredje. Da deler
+             prosjektene alltid side parvis (overskriften + de to første
+             på §03-førstesiden), og kun et eventuelt siste prosjekt uten
+             makker står alene. */
+          .project-block:nth-child(2n+1):not(:first-child) {
+            break-before: page !important;
+            page-break-before: always !important;
+          }
+          /* Første prosjekt på §03-siden trenger ikke topp-luft —
+             seksjonsoverskriften gir den. Sparer høyden som skal til for
+             at prosjekt nummer to får plass på samme side. */
+          .project-block:first-child {
+            padding-top: 2mm !important;
+          }
+          /* Kompaktere faktarader i print (inline-stilen har 5px):
+             7-8 rader per prosjekt gjør dette til ~6-7 mm spart høyde
+             per blokk — nok til at to prosjekter deler side. */
+          .project-block-header .grid > div > div {
+            padding: 2.5px 0 !important;
           }
           .project-block-header {
             break-inside: avoid !important;
@@ -1195,13 +1222,13 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             page-break-inside: avoid !important;
           }
           .project-status p {
-            line-height: 1.55 !important;
+            line-height: 1.5 !important;
           }
           /* Cap image height in print. At ~90mm column width with 16:10
              aspect ratio the natural height is ~56mm; cap to 4.6cm to free
              up vertical space for a second block on the same page. */
           .project-block img {
-            max-height: 4.6cm !important;
+            max-height: 4.2cm !important;
             object-fit: cover;
           }
           /* Tighten the gap between project blocks in print.
@@ -1597,17 +1624,7 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
               color: COL.paper,
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div
-                style={{
-                  fontSize: 10,
-                  letterSpacing: "0.28em",
-                  textTransform: "uppercase",
-                  opacity: 0.5,
-                }}
-              >
-                Rapport slutt
-              </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "flex-start" }}>
               <BNLogo light height={32} />
             </div>
 
@@ -2318,18 +2335,8 @@ function SingleProjectReport({ project: p, data }) {
         style={{ display: "none", background: COL.ink, color: COL.paper }}
       >
         <div
-          style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}
+          style={{ display: "flex", justifyContent: "flex-end", alignItems: "flex-start" }}
         >
-          <div
-            style={{
-              fontSize: 10,
-              letterSpacing: "0.28em",
-              textTransform: "uppercase",
-              opacity: 0.5,
-            }}
-          >
-            Rapport slutt
-          </div>
           <BNLogo light height={32} />
         </div>
 
