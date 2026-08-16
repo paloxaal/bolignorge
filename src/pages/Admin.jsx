@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 import RichText from "../components/RichText";
@@ -390,6 +390,43 @@ const SEED = {
   ],
 };
 
+// Komprimerer et opplastet bilde før det legges i dashboard-dataen.
+// Bildene ligger som data-URL-er inne i selve JSON-en som skrives til
+// databasen ved hver lagring, så ukomprimerte foto gjør hver eneste
+// lagring tilsvarende treg. Nedskalering til maks 1600 px JPEG er mer
+// enn nok for visningene og tar hvert bilde fra megabyte til ~100–250 kB.
+const compressImage = (file, { maxDim = 1600, quality = 0.82 } = {}) =>
+  new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      // Små bilder som allerede er kompakte trenger ingen re-koding
+      if (scale === 1 && file.size <= 250 * 1024) {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Klarte ikke å lese bildet"));
+        reader.readAsDataURL(file);
+        return;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext("2d");
+      // JPEG har ikke gjennomsiktighet — legg hvit bunn under PNG-er
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Klarte ikke å lese bildet"));
+    };
+    img.src = objectUrl;
+  });
+
 const STORAGE_KEY = "bn_dashboard_v1";
 const storage = {
   get: async () => {
@@ -423,13 +460,25 @@ const storage = {
       if (!userData?.user?.id) {
         return { ok: false, error: "Ikke logget inn (sesjon utløpt)" };
       }
-      const { error } = await supabase
+      const upsertPromise = supabase
         .from("dashboard_state")
         .upsert({
           id: "main",
           data: JSON.parse(value),
           updated_by: userData.user.id,
         });
+      // Uten tidsfrist blir «Lagrer…» stående for alltid hvis
+      // opplastingen henger — da må feilen heller vises.
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error("Tidsavbrudd ved lagring (30 s) — sjekk nettforbindelsen")
+            ),
+          30000
+        )
+      );
+      const { error } = await Promise.race([upsertPromise, timeoutPromise]);
       if (error) {
         console.error("[dashboard] save error:", error.message);
         return { ok: false, error: error.message };
@@ -905,23 +954,60 @@ function AdminDashboard() {
     })();
   }, []);
 
-  // Persist on change
+  // Persist on change — én lagring om gangen. Hele dashbordet skrives som
+  // én JSON (inkl. bilder), så overlappende opplastinger metter nettet og
+  // gjør at alt henger. Endringer som kommer mens en lagring pågår, samles
+  // opp og skrives i én ny lagring etterpå.
+  const [savePayloadMb, setSavePayloadMb] = useState(0);
+  const latestDataRef = useRef(null);
+  const saveInFlightRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+
+  const runSave = async () => {
+    if (saveInFlightRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
+    saveInFlightRef.current = true;
+    const payload = JSON.stringify(latestDataRef.current);
+    setSavePayloadMb(payload.length / (1024 * 1024));
+    const result = await storage.set(STORAGE_KEY, payload);
+    saveInFlightRef.current = false;
+    if (pendingSaveRef.current) {
+      pendingSaveRef.current = false;
+      runSave();
+      return;
+    }
+    if (result?.ok) {
+      setSaveStatus("saved");
+      setSaveError(null);
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    } else {
+      setSaveStatus("error");
+      setSaveError(result?.error || "Ukjent feil");
+    }
+  };
+
   useEffect(() => {
     if (!data || loading) return;
+    latestDataRef.current = data;
     setSaveStatus("saving");
-    const t = setTimeout(async () => {
-      const result = await storage.set(STORAGE_KEY, JSON.stringify(data));
-      if (result?.ok) {
-        setSaveStatus("saved");
-        setSaveError(null);
-        setTimeout(() => setSaveStatus("idle"), 1500);
-      } else {
-        setSaveStatus("error");
-        setSaveError(result?.error || "Ukjent feil");
-      }
-    }, 400);
+    const t = setTimeout(runSave, 800);
     return () => clearTimeout(t);
   }, [data, loading]);
+
+  // Endringene ligger kun i minnet til lagringen faktisk er fullført —
+  // varsle før siden forlates mens en lagring pågår eller har feilet.
+  useEffect(() => {
+    const handler = (e) => {
+      if (saveStatus === "saving" || saveStatus === "error") {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [saveStatus]);
 
   if (loading || !data) {
     return (
@@ -1115,7 +1201,7 @@ function AdminDashboard() {
           >
             {NAV.find((n) => n.id === page)?.label}
           </div>
-          <SaveIndicator status={saveStatus} error={saveError} />
+          <SaveIndicator status={saveStatus} error={saveError} sizeMb={savePayloadMb} />
         </div>
 
         {/* Desktop top bar */}
@@ -1142,7 +1228,7 @@ function AdminDashboard() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            <SaveIndicator status={saveStatus} error={saveError} />
+            <SaveIndicator status={saveStatus} error={saveError} sizeMb={savePayloadMb} />
             <span
               className="text-xs"
               style={{ color: COL.muted, fontFamily: "'JetBrains Mono', monospace" }}
@@ -1313,7 +1399,7 @@ function BNLogo({ light = false, height = 32 }) {
 }
 
 // ---------------- SAVE INDICATOR ----------------
-function SaveIndicator({ status, error }) {
+function SaveIndicator({ status, error, sizeMb = 0 }) {
   if (status === "idle") return null;
   if (status === "error") {
     return (
@@ -1322,8 +1408,13 @@ function SaveIndicator({ status, error }) {
         style={{ color: COL.burgundy }}
         title={error || "Klarte ikke lagre — sjekk browser-konsoll for detaljer"}
       >
-        <AlertCircle size={11} />
-        <span style={{ fontWeight: 600 }}>Ikke lagret</span>
+        <AlertCircle size={11} className="shrink-0" />
+        <span
+          className="truncate"
+          style={{ fontWeight: 600, maxWidth: 300 }}
+        >
+          Ikke lagret{error ? ` — ${error}` : ""}
+        </span>
       </div>
     );
   }
@@ -1335,7 +1426,10 @@ function SaveIndicator({ status, error }) {
       {status === "saving" ? (
         <>
           <Loader2 size={11} className="animate-spin" />
-          <span>Lagrer…</span>
+          <span>
+            Lagrer…
+            {sizeMb >= 1 ? ` (${sizeMb.toFixed(1).replace(".", ",")} MB)` : ""}
+          </span>
         </>
       ) : (
         <>
@@ -1372,27 +1466,23 @@ function DashboardPage({ data, setData, totals }) {
     setEditingMarket(true);
   };
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = ""; // reset så samme fil kan velges igjen
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       alert("Filen må være et bilde (PNG, JPG, etc).");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      const ok = confirm(
-        `Filen er ${(file.size / 1024).toFixed(0)} KB. Anbefalt maks ~500 KB for rask innlasting. Legg den inn likevel?`
-      );
-      if (!ok) {
-        e.target.value = "";
-        return;
-      }
+    if (file.size > 15 * 1024 * 1024) {
+      alert("Bildet må være under 15 MB.");
+      return;
     }
-    const reader = new FileReader();
-    reader.onload = (ev) => setImageUrlDraft(ev.target?.result || "");
-    reader.onerror = () => alert("Klarte ikke å lese filen.");
-    reader.readAsDataURL(file);
-    e.target.value = ""; // reset så samme fil kan velges igjen
+    try {
+      setImageUrlDraft(await compressImage(file));
+    } catch {
+      alert("Klarte ikke å lese filen.");
+    }
   };
 
   const [saveError, setSaveError] = useState(null);
@@ -3678,16 +3768,19 @@ function ProjectEditModal({ project, onSave, onDelete, onClose }) {
               type="file"
               accept="image/jpeg,image/png,image/webp"
               className="hidden"
-              onChange={(e) => {
+              onChange={async (e) => {
                 const file = e.target.files?.[0];
+                e.target.value = "";
                 if (!file) return;
-                if (file.size > 2 * 1024 * 1024) {
-                  alert("Bildet må være under 2 MB");
+                if (file.size > 15 * 1024 * 1024) {
+                  alert("Bildet må være under 15 MB.");
                   return;
                 }
-                const reader = new FileReader();
-                reader.onload = () => update("imageUrl", reader.result);
-                reader.readAsDataURL(file);
+                try {
+                  update("imageUrl", await compressImage(file));
+                } catch (err) {
+                  alert(err.message);
+                }
               }}
             />
           </Field>
