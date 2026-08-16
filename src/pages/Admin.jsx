@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
+import RichText from "../components/RichText";
 import {
   LayoutDashboard,
   Building2,
@@ -3588,6 +3589,22 @@ function ProjectEditModal({ project, onSave, onDelete, onClose }) {
               }}
               placeholder="Fortellende statustekst som vises i månedsrapportens 'Prosjekt for prosjekt'-seksjon."
             />
+            <div
+              className="mt-1.5 text-[11px]"
+              style={{ color: COL.muted, lineHeight: 1.5 }}
+            >
+              Tips: Skriv{" "}
+              <code
+                style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: 10.5,
+                }}
+              >
+                [her](https://lenken.no)
+              </code>{" "}
+              for å vise en klikkbar «her» i stedet for hele URL-en. Rene
+              URL-er blir også klikkbare automatisk.
+            </div>
           </Field>
 
           <div className="grid grid-cols-3 gap-4">
@@ -6862,7 +6879,9 @@ function ProjectByProjectSection({ data, num }) {
                   className="text-[14px] leading-[1.7] whitespace-pre-line"
                   style={{ color: COL.inkSoft, maxWidth: "85ch" }}
                 >
-                  {p.statusLong || (
+                  {p.statusLong ? (
+                    <RichText text={p.statusLong} />
+                  ) : (
                     <em style={{ color: COL.muted }}>Ingen statustekst.</em>
                   )}
                 </p>
@@ -7137,7 +7156,9 @@ function SingleProjectReport({ project: p, data }) {
             className="mt-4 text-[14px] leading-[1.7] whitespace-pre-line"
             style={{ color: COL.inkSoft, maxWidth: "80ch" }}
           >
-            {p.statusLong || (
+            {p.statusLong ? (
+              <RichText text={p.statusLong} />
+            ) : (
               <em style={{ color: COL.muted }}>Ingen statustekst.</em>
             )}
           </p>
