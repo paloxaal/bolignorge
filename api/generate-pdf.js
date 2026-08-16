@@ -76,6 +76,10 @@ export default async function handler(req, res) {
       printBackground: true,
       preferCSSPageSize: true,
       displayHeaderFooter: false,
+      // Eksplisitte marger som matcher @page-regelen i print-CSS-en.
+      // Uten disse legger motoren ut innholdet på full papirbredde og
+      // CSS-margene skyver det utenfor arket i høyrekant.
+      margin: { top: "17mm", right: "12mm", bottom: "18mm", left: "12mm" },
     });
 
     const safeName =

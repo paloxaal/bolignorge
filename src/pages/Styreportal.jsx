@@ -1024,11 +1024,26 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             color: #F6F1E7 !important;
             border: none !important;
             border-radius: 0 !important;
-            break-before: page !important;
-            page-break-before: always !important;
+            /* NB: ingen eksplisitt break-before her — byttet til den
+               navngitte @page-regelen (page: closing-page) tvinger
+               allerede sideskift, og et eksplisitt break-before i
+               tillegg ga en helt tom side foran baksiden. */
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
+
+          /* PDF-motoren legger ut siden på A4 minus sidemarger (~703 px) —
+             under Tailwinds md:-bruddpunkt (768 px). Uten disse reglene
+             kollapser alle md:-grids til én kolonne i PDF-en. Gjenskap
+             de tiltenkte kolonnene eksplisitt i print, uavhengig av
+             bruddpunkt. */
+          .md\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .md\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+          .md\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+          .md\\:grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+          /* Selskapstall-tabellen har minWidth 720 px for skjerm-scrolling —
+             bredere enn A4-flaten. I print må den følge sidebredden. */
+          table { min-width: 0 !important; max-width: 100% !important; }
 
           /* ============ CONTENT FLOW ============ */
           .report-flow {
@@ -1038,9 +1053,15 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
             max-width: 100% !important;
           }
           .report-flow > * + * { margin-top: 7mm !important; }
-          .report-flow > section,
-          .report-flow > div {
-            max-width: 100% !important;
+          /* Chromium-paginering måler enkelte blokker mot papirbredden
+             (210 mm) i stedet for innholdsflaten — lås alle innholds-
+             seksjoner til flatebredden i absolutte enheter. Forsiden og
+             baksiden skal derimot være fullbredde (egne @page-regler
+             med margin 0) og unntas. 186 mm = 210 − 2 × 12 mm marg. */
+          .report-flow > section:not(.cover-hero):not(.report-closing),
+          .report-flow > div:not(.cover-hero):not(.report-closing) {
+            width: 186mm !important;
+            max-width: 186mm !important;
             box-sizing: border-box !important;
           }
 
@@ -1135,14 +1156,24 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           .project-block {
             break-inside: auto !important;
             page-break-inside: auto !important;
-            padding-top: 6mm !important;
-            padding-bottom: 3mm !important;
+            /* 12 mm topp-padding gir tydelig luft mellom to prosjekter
+               som deler side, i stedet for at all slakk samles nederst
+               på siden. */
+            padding-top: 12mm !important;
+            padding-bottom: 4mm !important;
           }
           .project-block-header {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
             break-after: avoid !important;
             page-break-after: avoid !important;
+            /* Chromium-paginering måler enkelte avoid-blokker mot
+               papirbredden (210 mm) i stedet for innholdsflaten — lås
+               bredden i absolutte enheter så faktakolonnen aldri kan
+               stikke utenfor arket. 186 mm = 210 mm − 2 × 12 mm marg. */
+            width: 186mm !important;
+            max-width: 186mm !important;
+            box-sizing: border-box !important;
           }
           /* Tighten internal margins inside the header in print:
              1) name+location row → small margin under
