@@ -1219,6 +1219,18 @@ function StyreportalCore({ data, mode = "auth", profile, signOut, expiresAt, las
           .project-block:first-child {
             padding-top: 2mm !important;
           }
+          /* Skillestreken mellom prosjekter: bunnlinjen på blokkene kunne
+             lande oppå den fixed-posisjonerte bunnteksten når en blokk
+             fyller siden helt ned. Flytt streken til toppen av det andre
+             prosjektet i hvert par i stedet — den kan aldri kollidere
+             med sidebunnen. (Oddetallsblokkene starter egne sider og
+             skal ikke ha strek øverst.) */
+          .project-block {
+            border-bottom: none !important;
+          }
+          .project-block:nth-child(2n) {
+            border-top: 1px solid #E6DCC4 !important;
+          }
           /* Kompaktere faktarader i print (inline-stilen har 5px):
              7-8 rader per prosjekt gjør dette til ~6-7 mm spart høyde
              per blokk — nok til at to prosjekter deler side. */
