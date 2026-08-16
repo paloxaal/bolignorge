@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
+import RichText from "../components/RichText";
 import {
   LayoutDashboard,
   Building2,
@@ -2270,7 +2271,9 @@ function SingleProjectReport({ project: p, data }) {
             className="text-[15px] leading-[1.7] whitespace-pre-line"
             style={{ color: COL.inkSoft, maxWidth: "80ch" }}
           >
-            {p.statusLong || (
+            {p.statusLong ? (
+              <RichText text={p.statusLong} />
+            ) : (
               <em style={{ color: COL.muted }}>Ingen statustekst.</em>
             )}
           </p>
@@ -2635,7 +2638,9 @@ function ProjectByProjectSection({ data, num }) {
                   className="text-[14px] leading-[1.7] whitespace-pre-line"
                   style={{ color: COL.inkSoft, maxWidth: "85ch" }}
                 >
-                  {p.statusLong || (
+                  {p.statusLong ? (
+                    <RichText text={p.statusLong} />
+                  ) : (
                     <em style={{ color: COL.muted }}>Ingen statustekst.</em>
                   )}
                 </p>
@@ -3779,7 +3784,7 @@ function ProjectViewer({ project, onClose }) {
                   fontWeight: 400,
                 }}
               >
-                {p.statusLong}
+                <RichText text={p.statusLong} />
               </p>
             ) : (
               <p className="text-sm italic" style={{ color: COL.muted }}>
