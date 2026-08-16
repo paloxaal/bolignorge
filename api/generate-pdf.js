@@ -7,14 +7,11 @@
 // Tokenet er legitimasjonen (samme modell som delingslenkene): klienten
 // oppretter et kortlevd share_token først, og RLS i databasen avviser
 // utløpte/ugyldige tokens — funksjonen selv trenger ingen hemmeligheter.
-import chromium from "@sparticuz/chromium-min";
+import { existsSync } from "node:fs";
 import puppeteer from "puppeteer-core";
 
 // Chromium lastes ned som komplett, selvforsynt pakke (binær + delte
 // biblioteker) ved første kjøring og caches i /tmp mellom varme kall.
-// Å bundle binæren i deployen (@sparticuz/chromium uten -min) feilet på
-// Vercel: filsporingen droppet de delte bibliotekene, og oppstarten døde
-// med «error while loading shared libraries: libnss3.so».
 const CHROMIUM_PACK =
   "https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar";
 
@@ -33,13 +30,28 @@ export default async function handler(req, res) {
 
   let browser = null;
   try {
+    // Vercel setter ikke AWS-miljøvariablene @sparticuz/chromium-min
+    // sjekker for å aktivere Lambda-oppsettet sitt (utpakking av delte
+    // biblioteker til /tmp/al2023/lib + LD_LIBRARY_PATH). Uten dette dør
+    // Chromium-oppstarten med «libnss3.so: cannot open shared object
+    // file». Markøren må stå FØR modulen lastes (den sjekker ved import)
+    // — derfor dynamisk import her i stedet for statisk øverst.
+    if (
+      !process.env.PDF_CHROMIUM_PATH &&
+      !process.env.AWS_EXECUTION_ENV &&
+      !process.env.AWS_LAMBDA_JS_RUNTIME
+    ) {
+      process.env.AWS_LAMBDA_JS_RUNTIME = "nodejs22.x";
+    }
+    const chromium = (await import("@sparticuz/chromium-min")).default;
+
     browser = await puppeteer.launch({
       args: chromium.args,
       defaultViewport: { width: 1280, height: 900 },
       executablePath:
         process.env.PDF_CHROMIUM_PATH ||
         (await chromium.executablePath(CHROMIUM_PACK)),
-      headless: true,
+      headless: chromium.headless,
     });
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: "networkidle0", timeout: 45000 });
@@ -80,7 +92,15 @@ export default async function handler(req, res) {
     res.status(200).send(Buffer.from(pdf));
   } catch (e) {
     console.error("[generate-pdf]", e.message);
-    res.status(500).json({ error: e.message || "PDF-generering feilet" });
+    res.status(500).json({
+      error: e.message || "PDF-generering feilet",
+      // Feilsøkingsinfo — avslører ingen hemmeligheter, men viser om
+      // Chromium-bibliotekene faktisk kom på plass i kjøremiljøet.
+      diag: {
+        ldLibraryPath: process.env.LD_LIBRARY_PATH || null,
+        libnss3Extracted: existsSync("/tmp/al2023/lib/libnss3.so"),
+      },
+    });
   } finally {
     if (browser) await browser.close().catch(() => {});
   }
